@@ -20,14 +20,21 @@ understand before tapping this:
    strategies in their official taps ([discussion #574](https://github.com/orgs/Homebrew/discussions/574)).
    It will only ever live as a third-party tap.
 2. **Installing from this tap runs tap-provided Ruby with network access.** Homebrew does not audit
-   third-party taps. The strategy code in `lib/` performs an HTTP POST and downloads whatever URL
-   comes back. Read it before you trust it — that goes for any third-party tap, but it matters more
-   here than for a tap that only fetches a fixed URL.
+   third-party taps. The strategy code will live in `lib/` and performs an HTTP POST, then downloads
+   whatever URL comes back. Read it before you trust it — that goes for any third-party tap, but it
+   matters more here than for a tap that only fetches a fixed URL.
 
-Every download is checksum-verified against a `sha256` pinned in the cask, so a compromised or
+Every download will be checksum-verified against a `sha256` pinned in the cask, so a compromised or
 re-spun artifact fails loudly rather than installing.
 
+Blackmagic's endpoints, request shapes and the reasoning behind every design decision are recorded
+in [`HANDOFF.md`](HANDOFF.md), which is the source of truth for that detail — this README repeats
+only what a user needs.
+
 ## Install
+
+> **Not yet working — requires [#2](../../issues/2).** No cask exists, so the third command below
+> will fail. The `brew tap` and `brew trust` steps work today.
 
 This tap is private, so `brew tap` needs your GitHub credentials (SSH key or a credential helper
 configured for HTTPS).
@@ -51,6 +58,9 @@ which keeps them collision-free against homebrew-cask (where a token clash would
 makes the whole tap discoverable via `blackmagic-<TAB>`.
 
 ## Configuration
+
+> **Not yet working — requires [#3](../../issues/3).** This section is the specification the config
+> loader will be built against; nothing reads this file today.
 
 Most Blackmagic downloads need no configuration at all — roughly two thirds of their catalog is
 flagged as not requiring registration, and those resolve anonymously. **Install those with zero
@@ -82,10 +92,12 @@ CI without a config file.
 **Use your real details.** When a download requires registration, this tap is submitting *your*
 registration to Blackmagic — you are the party registering, the tap is just your HTTP client. It
 ships no defaults and fabricates nothing. Some releases additionally require accepting a licence
-agreement; support for those is deliberately not implemented yet, because accepting a legal
-agreement on someone's behalf without showing them the terms isn't acceptable.
+agreement; support for those is deliberately deferred ([#6](../../issues/6)), because accepting a
+legal agreement on someone's behalf without showing them the terms isn't acceptable.
 
 ## Staying up to date
+
+> **Not yet working — requires [#4](../../issues/4).**
 
 Casks carry a `livecheck` block that reads Blackmagic's version endpoint, so:
 
