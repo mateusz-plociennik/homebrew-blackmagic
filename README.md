@@ -32,11 +32,21 @@ re-spun artifact fails loudly rather than installing.
 This tap is private, so `brew tap` needs your GitHub credentials (SSH key or a credential helper
 configured for HTTPS).
 
+Recent Homebrew versions refuse to load formulae, casks or commands from non-official taps until you
+explicitly trust them, so this is a two-step install:
+
 ```sh
+brew tap mateusz-plociennik/blackmagic
+brew trust --tap mateusz-plociennik/blackmagic
 brew install --cask mateusz-plociennik/blackmagic/blackmagic-ethernet-switch
 ```
 
-That auto-taps on first use — no separate `brew tap` needed. Casks are prefixed `blackmagic-*`,
+Without the `brew trust`, Homebrew reports the tap as `Untrusted` and skips its casks. Trusted
+entries are recorded in `~/.homebrew/trust.json` (or under `$XDG_CONFIG_HOME/homebrew/` if that is
+set). Given that this tap ships a custom download strategy — arbitrary Ruby that runs on every
+install — that gate is doing exactly what it should; read `lib/` before you clear it.
+
+Casks are prefixed `blackmagic-*`,
 which keeps them collision-free against homebrew-cask (where a token clash would silently win) and
 makes the whole tap discoverable via `blackmagic-<TAB>`.
 
