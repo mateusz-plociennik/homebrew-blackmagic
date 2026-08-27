@@ -3,9 +3,8 @@
 A Homebrew tap for Blackmagic Design software, installing directly from Blackmagic's official
 download endpoints instead of their web download form.
 
-> **Status: not implemented yet.** This repo currently contains only design notes
-> ([`HANDOFF.md`](HANDOFF.md)) and the tracking issues. No casks exist. The research behind the
-> approach is done and verified; the build is not.
+> **Status: one cask works.** `blackmagic-ethernet-switch` installs and uninstalls end to end,
+> verified on macOS 26.5. Everything else is still tracked in the issues.
 
 ## Why this can't be a normal cask
 
@@ -20,11 +19,15 @@ understand before tapping this:
    strategies in their official taps ([discussion #574](https://github.com/orgs/Homebrew/discussions/574)).
    It will only ever live as a third-party tap.
 2. **Installing from this tap runs tap-provided Ruby with network access.** Homebrew does not audit
-   third-party taps. The strategy code will live in `lib/` and performs an HTTP POST, then downloads
+   third-party taps. The strategy code lives in `lib/` and performs an HTTP POST, then downloads
    whatever URL comes back. Read it before you trust it — that goes for any third-party tap, but it
    matters more here than for a tap that only fetches a fixed URL.
 
-Every download will be checksum-verified against a `sha256` pinned in the cask, so a compromised or
+One quirk worth stating plainly: Blackmagic's download endpoint rejects any request whose
+`User-Agent` contains the word `curl`, which is what Homebrew sends by default, so this tap sends no
+`User-Agent` at all. Nothing else about the request differs from what their own web form sends.
+
+Every download is checksum-verified against a `sha256` pinned in the cask, so a compromised or
 re-spun artifact fails loudly rather than installing.
 
 Blackmagic's endpoints, request shapes and the reasoning behind every design decision are recorded
@@ -32,9 +35,6 @@ in [`HANDOFF.md`](HANDOFF.md), which is the source of truth for that detail — 
 only what a user needs.
 
 ## Install
-
-> **Not yet working — requires [#2](../../issues/2).** No cask exists, so the third command below
-> will fail. The `brew tap` and `brew trust` steps work today.
 
 This tap is private, so `brew tap` needs your GitHub credentials (SSH key or a credential helper
 configured for HTTPS).
