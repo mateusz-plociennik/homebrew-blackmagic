@@ -1,6 +1,6 @@
 # typed: false
 # frozen_string_literal: true
-#
+
 # Homebrew's own download strategies are `# typed: strict`, but they live inside the Homebrew
 # checkout that `srb` typechecks. Nothing typechecks `Library/Taps`, so a stricter sigil here would
 # claim a guarantee no tool verifies, while a wrong `sig` still fails at runtime — inside
@@ -83,12 +83,13 @@ class BmdDownloadStrategy < CurlDownloadStrategy
       endpoint,
       retries:    0,
       user_agent: USER_AGENT,
-      timeout:,
+      timeout:
     )
 
     response = result.stdout.strip
+    resolved = result.success? && response.start_with?("https://")
 
-    unless result.success? && response.start_with?("https://")
+    unless resolved
       raise CurlDownloadStrategyError.new(endpoint, <<~MESSAGE)
         Blackmagic Design refused to issue a download URL. Their response was:
           #{response.presence || "(empty, curl exited #{result.status.exitstatus})"}
