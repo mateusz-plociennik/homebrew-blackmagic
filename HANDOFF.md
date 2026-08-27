@@ -16,7 +16,8 @@ BMD's download page is an AngularJS app (`https://jslibs.blackmagicdesign.com/bu
 Three relevant endpoints:
 
 ### 1. Catalog
-`GET https://www.blackmagicdesign.com/api/support/{country}/downloads.json` — ~1.5 MB, 1219 releases.
+`GET https://www.blackmagicdesign.com/api/support/{country}/downloads.json` — ~1.5 MB (gzipped to
+~226 KB, `cache-control: max-age=900`), 1219 releases.
 Entry shape:
 
 ```json
@@ -28,6 +29,15 @@ Entry shape:
 
 Flag distribution: **836** need nothing · **160** registration · **223** registration + T&C.
 The website fetches this once per page load and filters client-side (memoised in `getSupportDownloadsModel`).
+The support pages are entirely client-rendered — `window.__bmd` carries only nav, privacy,
+translations and locale — so the "Latest Downloads" list is built from this catalog and nothing
+lighter exists to read.
+
+**Release names discriminate products, and the suffix matters.** `DaVinci Resolve 21.0.4 Update` and
+`DaVinci Resolve Studio 21.0.4 Update` are different products; pre-16 Studio releases were named
+`DaVinci Resolve 15.3 Studio`, so a prefix match on `DaVinci Resolve ` would swallow them. Observed
+suffixes across the catalog: `Update` (570), none (417), `SDK` (179), `Studio` (30),
+`Studio Update` (9), and 10 `Beta`/`Public Beta` releases. Match the whole name, never a prefix.
 
 **Two distinct ID namespaces:** `releaseId` is the GUID in the web page path
 (`/support/download/65960dbc…/Mac OS X`), one per release across all platforms. `downloadId` is
@@ -35,9 +45,22 @@ per *(release × platform)* and is what the resolve endpoint takes. Posting a re
 `400 The download id '…' was not found`. Historic versions retain fixed downloadIds, so they look
 permanent.
 
-### 2. Version pointer (for the future scraper)
+### 2. Version pointer
 `GET https://www.blackmagicdesign.com/api/support/latest-stable-version/{product}/{platform}`
-→ `{"mac":{"releaseId":…,"downloadId":…,"major":21,"minor":0,"releaseNum":4}}`. No HTML parsing needed.
+→ `{"mac":{"releaseId":…,"downloadId":…,"major":21,"minor":0,"releaseNum":4}}`. Omit the platform to
+get every platform key at once (`mac`, `wintel`, `winx86`, `winarm`, `linux`).
+`POST /api/support/latest-version {product, platform}` is the same shape including betas.
+
+**Unusable for livecheck on most casks.** The `{product}` segment is the catalog's `product` field,
+which is a product *family*, not a product: Blackmagic Ethernet Switch's slug is `videohub`, and the
+pointer answers with Blackmagic Videohub 11.0.1. Nothing distinguishes them, and an unknown slug is
+indistinguishable from a known one — `ethernetswitch`, `ethernet-switch` and `totalnonsensexyz` all
+return `{"mac":null}` with a 200. `davinci-resolve` does resolve correctly (21.0.4).
+
+**Neither endpoint can list releases** — both return exactly one release per platform. The catalog is
+the only enumeration. `nav.json` (82 KB, `/api/support/{country}/nav.json`) maps products to families
+but carries no versions, `/api/v1/model/` is a countries list, and `sw.blackmagicdesign.com` has no
+directory listing. So livecheck reads the catalog; see `lib/bmd_livecheck.rb`.
 
 ### 3. Link resolution
 `POST https://www.blackmagicdesign.com/api/register/{country}/download/{downloadId}`,
@@ -156,7 +179,6 @@ Multi-GB downloads — slow to iterate on.
 
 ### Deferred (phase 3, explicitly out of scope)
 
-- `livecheck` block reading `/api/support/latest-stable-version/{product}/mac`
 - Catalog scraper emitting `brew bump-cask-pr` (which rewrites `version` + `sha256` and opens a PR)
   rather than hand-editing cask files. Must pace requests ≥30s.
 - The 223 `requiresTermsAndConditions` products. A cask that programmatically accepts a licence on

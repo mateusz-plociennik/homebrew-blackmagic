@@ -1,4 +1,5 @@
 require_relative "../lib/bmd_download_strategy"
+require_relative "../lib/bmd_livecheck"
 
 cask "blackmagic-ethernet-switch" do
   version "1.2"
@@ -15,6 +16,15 @@ cask "blackmagic-ethernet-switch" do
   name "Blackmagic Ethernet Switch"
   desc "Setup and monitoring utility for Blackmagic Ethernet Switch hardware"
   homepage "https://www.blackmagicdesign.com/products/blackmagicethernetswitch"
+
+  # Blackmagic name these releases "Blackmagic Ethernet Switch 1.2", with no suffix. See
+  # `BmdLivecheck` for why the catalog is read instead of the version-pointer endpoint, and why the
+  # regex is anchored at both ends.
+  livecheck do
+    url BmdLivecheck::CATALOG_URL
+    regex(/\ABlackmagic Ethernet Switch (\d+(?:\.\d+)*)\z/)
+    strategy :json, &BmdLivecheck::MAC_RELEASES
+  end
 
   # The pkg's own installer check refuses anything below 10.14 (Mojave), but Homebrew dropped that
   # symbol — `:catalina` is the oldest version it can still express, and it no longer runs on 10.14.

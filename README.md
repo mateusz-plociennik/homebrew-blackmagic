@@ -97,16 +97,24 @@ legal agreement on someone's behalf without showing them the terms isn't accepta
 
 ## Staying up to date
 
-> **Not yet working — requires [#4](../../issues/4).**
-
-Casks carry a `livecheck` block that reads Blackmagic's version endpoint, so:
+Every cask carries a `livecheck` block, so Blackmagic's own release list answers the question
+"is there a newer version?":
 
 ```sh
-brew outdated --cask     # tells you when Blackmagic ship a new release
+brew livecheck --cask --newer-only mateusz-plociennik/blackmagic/blackmagic-ethernet-switch
+brew outdated --cask     # once the cask has been bumped to the new version
 brew upgrade --cask
 ```
 
-No need to check the download page.
+`brew livecheck` reads upstream directly, so it sees a new Blackmagic release the moment it ships.
+`brew outdated` compares your installed version against the version pinned in the cask, so it only
+flags an update after the cask here has been bumped — each release needs a new `sha256` anyway.
+
+Livecheck reads Blackmagic's release catalog, which is the same endpoint their own support page
+fetches to render its "Latest Downloads" list — no HTML is parsed. Their version-pointer endpoint
+would be lighter but is keyed on a *product family* slug: Blackmagic Ethernet Switch shares the
+`videohub` slug with Blackmagic Videohub, so it reports the wrong product's version. `lib/bmd_livecheck.rb`
+has the detail.
 
 ## Contributing
 
