@@ -120,6 +120,11 @@ download id. No HTML is parsed. Their version-pointer endpoint would be lighter 
 *product family* slug: Blackmagic Ethernet Switch shares the `videohub` slug with Blackmagic
 Videohub, so it reports the wrong product's version. `lib/bmd_catalog.rb` has the detail.
 
+Bumping the cask is automated: a daily GitHub Actions workflow runs `brew bump`, which compares each
+cask's livecheck result against its pinned version and opens a pull request for anything newer —
+downloading the artifact to compute the new `sha256`. Run it on demand from the Actions tab; tick
+**report-only** to see what it would do without opening pull requests.
+
 ## Contributing
 
 Design decisions and the researched API details are in [`HANDOFF.md`](HANDOFF.md). Work is tracked

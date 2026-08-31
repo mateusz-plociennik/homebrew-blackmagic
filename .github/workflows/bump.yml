@@ -1,0 +1,74 @@
+name: Bump casks
+
+# `brew bump` is the whole scraper. It runs each cask's `livecheck` — which reads Blackmagic's release
+# catalog — compares the result against the version pinned in the cask, asks GitHub whether a bump PR
+# for that version already exists, and hands anything genuinely new to `brew bump-cask-pr`, which
+# downloads the artifact, computes the `sha256`, and opens the PR. Since the `downloadId` is looked up
+# from the version at fetch time, `--version` is all it needs; nothing has to patch the cask
+# afterwards.
+#
+# Note that computing a checksum means downloading the real artifact: ~350 MB for Ethernet Switch,
+# multiple GB for DaVinci Resolve. That is unavoidable, and it is why this runs on a schedule rather
+# than on every push.
+
+on:
+  schedule:
+    # Daily. Blackmagic ship releases irregularly, so there is no window worth targeting.
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+    inputs:
+      report-only:
+        description: Report what would be bumped without opening pull requests
+        type: boolean
+        default: false
+
+concurrency:
+  # Never two bumps at once: the second would push the same branch name.
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    runs-on: macos-latest
+    steps:
+      - name: Set up Homebrew
+        id: set-up-homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+        with:
+          # This tap is private, so both the checkout and the API calls need a token. `BUMP_TOKEN` is
+          # optional: set it to a PAT if you want the bump PRs to trigger the CI workflow, which
+          # `GITHUB_TOKEN`-authored PRs deliberately do not.
+          token: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+          brew-gh-api-token: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+          cask: true
+
+      - name: Cache Homebrew Bundler RubyGems
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.set-up-homebrew.outputs.gems-path }}
+          key: macos-latest-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
+          restore-keys: macos-latest-rubygems-
+
+      - name: Trust the tap
+        # Loading a cask from this tap runs its custom download strategy, which Homebrew refuses to do
+        # for an untrusted tap.
+        run: brew trust --tap ${{ steps.set-up-homebrew.outputs.tap-name }}
+
+      - name: Run brew bump
+        env:
+          HOMEBREW_GIT_NAME: github-actions[bot]
+          HOMEBREW_GIT_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          HOMEBREW_NO_INSTALL_FROM_API: 1
+          TAP: ${{ steps.set-up-homebrew.outputs.tap-name }}
+          REPORT_ONLY: ${{ inputs.report-only }}
+        run: |
+          # `--no-fork` pushes the bump branch to this repository rather than a fork; the token above
+          # is what authorises that push. Built as an array rather than an `${{ … && … || … }}`
+          # expression, where an empty middle branch is falsy and silently selects the other one.
+          args=(--cask --tap "$TAP")
+          [[ "$REPORT_ONLY" == "true" ]] || args+=(--open-pr --no-fork)
+          brew bump "${args[@]}"

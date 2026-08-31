@@ -210,9 +210,11 @@ Multi-GB downloads — slow to iterate on.
 
 ### Deferred (phase 3, explicitly out of scope)
 
-- Catalog scraper emitting `brew bump-cask-pr` (which rewrites `version` + `sha256` and opens a PR)
-  rather than hand-editing cask files. No pacing floor (see the resolve endpoint above), and since #8
-  `--version` is sufficient — the downloadId follows from the version.
+- ~~Catalog scraper emitting `brew bump-cask-pr`.~~ **Built in #5, and there is no scraper.**
+  `brew bump --cask --tap … --open-pr --no-fork` already does every part of it: runs livecheck (which
+  reads the catalog), diffs against the pinned version, checks GitHub for an existing bump PR, and
+  calls `bump-cask-pr` to download, checksum and open. `.github/workflows/bump.yml` runs it daily.
+  Since #8, `--version` is sufficient — the downloadId follows from the version.
 - The 223 `requiresTermsAndConditions` products. A cask that programmatically accepts a licence on
   the user's behalf must display the terms (present in the catalog JSON as `termsAndConditions`) and
   require an explicit opt-in in the config. Do not design this until a T&C product is actually in scope.
