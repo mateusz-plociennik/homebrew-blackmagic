@@ -32,15 +32,41 @@ module BmdCatalog
 
   PLATFORM = "Mac OS X"
 
-  # Versions of every catalog release that ships a macOS build and whose *entire* name matches the
-  # cask's regex.
+  # A version, as Blackmagic write one in a release name: one to four dot-separated numbers, from
+  # `DaVinci Resolve Project Server 21` through `Blackmagic Camera 9.9.1`.
+  VERSION_PATTERN = '\d+(?:\.\d+)*'
+
+  # The only trailing word a release name may carry and still be the same product.
   #
-  # The anchoring is the point. Blackmagic distinguish separate products by suffixing the release
-  # name — `DaVinci Resolve 21.0.4 Update` and `DaVinci Resolve Studio 21.0.4 Update` are different
-  # products, older Studio releases were named `DaVinci Resolve 15.3 Studio`, and there are `SDK`
-  # and `Public Beta` releases under otherwise identical names. A regex anchored at both ends forces
-  # each cask to spell out the name shape it accepts, so it cannot silently inherit a sibling
-  # product's version. Pass it a full-name pattern, not a prefix.
+  # Blackmagic ship a product's first release of a series under a bare name and its point releases
+  # under ` Update` — `Blackmagic Camera 10.2` then `Blackmagic Camera 10.2.2 Update` — so a pattern
+  # that accepts only the bare shape sees a product's history stop at its last bare release. That is
+  # silent: livecheck reports the stale version as current, `brew bump` finds nothing to do, and the
+  # cask stays frozen. Every product in this tap except Ethernet Switch and Cloud Store point-releases
+  # this way.
+  #
+  # Nothing else belongs here. ` SDK` builds are developer libraries rather than apps, ` Beta` and
+  # ` Public Beta` are a channel this tap does not ship, and ` Studio` marks a separate paid product.
+  OPTIONAL_SUFFIX = "(?: Update)?"
+
+  # The pattern a cask's release names must match, anchored at both ends.
+  #
+  # Anchoring is what keeps products apart, and it earns its keep in both directions. `DaVinci
+  # Resolve` must not match `DaVinci Resolve Studio 21.0.4 Update` (a different product, leading
+  # extra word) nor `DaVinci Resolve 15.3 Studio` (the same product's pre-16 naming, trailing extra
+  # word), and `Blackmagic RAW` must not match `Blackmagic RAW Player 1.4`. Capture group 1 is the
+  # version, which is what `MAC_RELEASES` hands back to livecheck.
+  #
+  # Casks call this rather than writing the regex out, so the set of accepted suffixes is defined
+  # once. A cask spelling its own regex would drift from `find_mac_release` below, and the two
+  # disagreeing is exactly the failure this replaced: a livecheck that reports a version the lookup
+  # then cannot resolve.
+  def self.release_regex(product)
+    /\A#{Regexp.escape(product)} (#{VERSION_PATTERN})#{OPTIONAL_SUFFIX}\z/
+  end
+
+  # Versions of every catalog release that ships a macOS build and whose *entire* name matches the
+  # cask's regex. Pass a pattern from `release_regex`, never a prefix.
   MAC_RELEASES = proc do |json, regex|
     json["downloads"]&.map do |release|
       next if release.dig("urls", PLATFORM).blank?
@@ -57,33 +83,60 @@ module BmdCatalog
       ENV.fetch("BMD_TAP_COUNTRY", DEFAULT_COUNTRY)
     end
 
-    # The `downloadId` for a release's macOS build, looked up by the release's exact catalog name.
+    # The `downloadId` for the macOS build of a product's release, looked up by product name and
+    # version.
     #
     # Two distinct id namespaces live in the catalog: `id` is the release GUID that appears in the
     # web page path, one per release across all platforms, and `downloadId` is per
     # *(release × platform)* and is the only one the resolve endpoint accepts — posting a release id
     # returns `400 The download id '…' was not found`.
     #
-    # Raises rather than returning nil: this runs before any bytes move, and every caller needs the
-    # id. The message names what was looked for, because the likely cause is upstream renaming a
-    # release rather than the id going away.
-    def mac_download_id(name, timeout: nil)
-      release = releases(timeout:).find { |entry| entry["name"] == name }
+    # Keyed on the version rather than on the full release name because a cask holds only the
+    # version: `brew bump-cask-pr` rewrites `version`, `url` and `sha256` and nothing else, so a cask
+    # that spelled out `"Blackmagic Camera 10.2 Update"` would still be spelling out `10.2` after a
+    # bump to `10.2.2`, and `_fetch` would download the old artifact under the new version's name.
+    def mac_download_id(product, version, timeout: nil)
+      mac_download_id_from(releases(timeout:), product, version)
+    end
 
-      raise CatalogError, <<~MESSAGE if release.nil?
-        Blackmagic's catalog has no release named "#{name}".
+    # `mac_download_id` against an already-fetched catalog. Split out so the matching rules can be
+    # tested without curling 1.5 MB from Blackmagic; see `test/bmd_catalog_test.rb`.
+    def mac_download_id_from(releases, product, version)
+      find_mac_release(releases, product, version).dig("urls", PLATFORM).first.fetch("downloadId")
+    end
 
-        The cask pins that name; upstream has most likely renamed or withdrawn the release. Compare
-        against #{CATALOG_URL} and update the cask.
+    # The one release of `product` at `version` that ships a macOS build.
+    #
+    # Raises rather than returning nil in every failure mode: this runs before any bytes move, and
+    # every caller needs an id. The messages name what was looked for, since the likely cause is
+    # upstream renaming or withdrawing a release rather than an id going away.
+    def find_mac_release(releases, product, version)
+      pattern = release_regex(product)
+      matches = releases.select { |entry| entry["name"].to_s.match?(pattern) && entry["name"][pattern, 1] == version }
+
+      raise CatalogError, <<~MESSAGE if matches.empty?
+        Blackmagic's catalog has no release "#{product} #{version}".
+
+        The cask pins that product and version; upstream has most likely renamed or withdrawn the
+        release. Compare against #{CATALOG_URL} and update the cask.
       MESSAGE
 
-      download_id = release.dig("urls", PLATFORM)&.first&.fetch("downloadId", nil)
+      # Not reachable against today's catalog — no (product, version) pair carries both a bare and an
+      # ` Update` name. If upstream ever ships both, picking one by position would pin a `sha256`
+      # against whichever the catalog happened to list first, so refuse and name them instead.
+      raise CatalogError, <<~MESSAGE if matches.length > 1
+        "#{product} #{version}" matches #{matches.length} releases in Blackmagic's catalog:
+        #{matches.map { |entry| "  #{entry["name"]}" }.join("\n")}
 
-      raise CatalogError, <<~MESSAGE if download_id.blank?
-        Blackmagic's catalog lists "#{name}" but no #{PLATFORM} build for it.
+        Ambiguous, so nothing was downloaded. #{CATALOG_URL}
       MESSAGE
 
-      download_id
+      release = matches.first
+      return release if release.dig("urls", PLATFORM)&.first&.fetch("downloadId", nil).present?
+
+      raise CatalogError, <<~MESSAGE
+        Blackmagic's catalog lists "#{release["name"]}" but no #{PLATFORM} build for it.
+      MESSAGE
     end
 
     private

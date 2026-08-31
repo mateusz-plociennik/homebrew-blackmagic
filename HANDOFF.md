@@ -128,8 +128,12 @@ is stable, encodes the version, and keeps the cask auditable. It is never actual
 a retired ID fails at resolve time with BMD's own message; a respun artifact fails on checksum.
 Catalog lookup belongs in the scraper, not the installer.~~
 
-**Reversed in #8.** The cask names the release (`data: { "release" => "Blackmagic Ethernet Switch
-#{version}" }`) and `BmdCatalog.mac_download_id` looks the id up at fetch time. The drift argument
+**Reversed in #8.** The cask names the product (`data: { "product" => "Blackmagic Ethernet Switch" }`)
+and `BmdCatalog.mac_download_id` pairs it with `version` to look the id up at fetch time. (#8 had the
+cask spell out the whole release name; #9 replaced that with product-plus-version, because point
+releases are named `<product> <version> Update` and the suffix is not derivable from a version — a cask
+holding a full release name would keep the old name after a bump. See `BmdCatalog::OPTIONAL_SUFFIX`.)
+The drift argument
 covered a *retired* id, not a *stale* one — and a version bump produces exactly a stale one.
 `brew bump-cask-pr` rewrites only `version`, `url` and `sha256`, and `_fetch` ignores `url`, so a
 pinned id would have it download the old artifact, pin that artifact's checksum under the new version

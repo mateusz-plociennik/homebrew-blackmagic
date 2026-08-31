@@ -40,3 +40,8 @@ jobs:
 
       - name: Run brew test-bot --only-tap-syntax
         run: brew test-bot --only-tap-syntax
+
+      - name: Run the catalog tests
+        # `test-bot --only-tap-syntax` is style and audit; it runs no behaviour. `brew ruby` is what can
+        # load `utils/curl`, which `BmdCatalog` requires. The tests themselves make no network calls.
+        run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/bmd_catalog_test.rb"

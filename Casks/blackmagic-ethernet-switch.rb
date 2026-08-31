@@ -19,22 +19,25 @@ cask "blackmagic-ethernet-switch" do
   # Never fetched directly — this unsigned path 404s. BmdDownloadStrategy mints a signed URL at
   # fetch time; this stable string is what Homebrew keys its download cache on.
   #
-  # `data:` carries the release's exact catalog name to the strategy, which looks the download id up
-  # from it — so `version` is the only thing a bump has to touch. It is inert under
-  # CurlDownloadStrategy; never pair it with `using: :post`, which would POST it to the artifact host.
+  # `data:` carries the product's catalog name to the strategy, which pairs it with `version` to look
+  # the download id up — so `version` is the only thing a bump has to touch. The release name is not
+  # spelled out here because it is not derivable from the version: point releases are suffixed
+  # ` Update`. `data:` is inert under CurlDownloadStrategy; never pair it with `using: :post`, which
+  # would POST it to the artifact host.
   url "https://sw.blackmagicdesign.com/EthernetSwitch/v#{version}/Blackmagic_Ethernet_Switch_Macintosh_#{version}.zip",
       using: BmdDownloadStrategy,
-      data:  { "release" => "Blackmagic Ethernet Switch #{version}" }
+      data:  { "product" => "Blackmagic Ethernet Switch" }
   name "Blackmagic Ethernet Switch"
   desc "Setup and monitoring utility for Blackmagic Ethernet Switch hardware"
   homepage "https://www.blackmagicdesign.com/products/blackmagicethernetswitch"
 
-  # Blackmagic name these releases "Blackmagic Ethernet Switch 1.2", with no suffix — the same name
-  # shape the `data:` stanza above spells out. See `BmdCatalog` for why the catalog is read instead of
-  # the version-pointer endpoint, and why the regex is anchored at both ends.
+  # `release_regex` builds the both-ends-anchored pattern from the same product name the `data:` stanza
+  # carries, so livecheck and the download-id lookup cannot disagree about which releases belong to
+  # this cask. See `BmdCatalog` for why the catalog is read instead of the version-pointer endpoint,
+  # why the anchoring matters, and which suffixes the pattern accepts.
   livecheck do
     url BmdCatalog::CATALOG_URL
-    regex(/\ABlackmagic Ethernet Switch (\d+(?:\.\d+)*)\z/)
+    regex BmdCatalog.release_regex("Blackmagic Ethernet Switch")
     strategy :json, &BmdCatalog::MAC_RELEASES
   end
 
