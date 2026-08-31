@@ -55,7 +55,9 @@ jobs:
 
       - name: Trust the tap
         # Loading a cask from this tap runs its custom download strategy, which Homebrew refuses to do
-        # for an untrusted tap.
+        # for an untrusted tap. `setup-homebrew` already trusts the tap it checks out, so this reports
+        # "Already trusted" today; it is kept because everything after it fails without trust and the
+        # failure would not name trust as the cause.
         run: brew trust --tap ${{ steps.set-up-homebrew.outputs.tap-name }}
 
       - name: Run brew bump
