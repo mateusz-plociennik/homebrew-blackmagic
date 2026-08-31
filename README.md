@@ -12,7 +12,11 @@ Blackmagic serve their installers from CloudFront using **signed URLs with a ~1 
 unsigned path returns 404. There is no stable, fetchable URL to put in a cask — the real URL has to
 be requested at install time from Blackmagic's download endpoint, which returns a freshly signed one.
 
-That requires a **custom Homebrew download strategy**, which has two consequences you should
+Each cask therefore names the release it wants — `Blackmagic Ethernet Switch 1.2` — rather than an
+opaque download id, and the id is looked up in Blackmagic's release catalog at fetch time. That keeps
+the version the single thing a bump has to change.
+
+This requires a **custom Homebrew download strategy**, which has two consequences you should
 understand before tapping this:
 
 1. **This tap can never be upstreamed to homebrew-cask.** Homebrew forbid custom download
@@ -110,11 +114,11 @@ brew upgrade --cask
 `brew outdated` compares your installed version against the version pinned in the cask, so it only
 flags an update after the cask here has been bumped — each release needs a new `sha256` anyway.
 
-Livecheck reads Blackmagic's release catalog, which is the same endpoint their own support page
-fetches to render its "Latest Downloads" list — no HTML is parsed. Their version-pointer endpoint
-would be lighter but is keyed on a *product family* slug: Blackmagic Ethernet Switch shares the
-`videohub` slug with Blackmagic Videohub, so it reports the wrong product's version. `lib/bmd_livecheck.rb`
-has the detail.
+Livecheck reads Blackmagic's release catalog — the same endpoint their own support page fetches to
+render its "Latest Downloads" list, and the same one installs read to turn a release name into a
+download id. No HTML is parsed. Their version-pointer endpoint would be lighter but is keyed on a
+*product family* slug: Blackmagic Ethernet Switch shares the `videohub` slug with Blackmagic
+Videohub, so it reports the wrong product's version. `lib/bmd_catalog.rb` has the detail.
 
 ## Contributing
 

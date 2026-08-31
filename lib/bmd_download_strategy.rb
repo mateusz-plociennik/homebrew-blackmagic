@@ -9,6 +9,8 @@
 require "download_strategy"
 require "json"
 
+require_relative "bmd_catalog"
+
 # Downloads Blackmagic Design installers.
 #
 # Blackmagic serve their artifacts from CloudFront behind signed URLs that expire after roughly an
@@ -21,13 +23,19 @@ require "json"
 # all: a signed URL, whose signature differs on every mint, would produce a fresh multi-hundred-
 # megabyte cache entry per fetch and would defeat `brew fetch` followed by `brew install`.
 #
-# The download id travels in the cask's `data:` stanza. Only `CurlPostDownloadStrategy` ever reads
+# The endpoint takes a `downloadId`, which is per *(release × platform)* and opaque. Casks do not hold
+# it: they name the release, and the id is looked up in the catalog at fetch time (see `BmdCatalog`).
+# Pinning the id instead would let `brew bump-cask-pr` — which rewrites only `version`, `url` and
+# `sha256` — produce a cask whose version says 1.3 while the id still fetches 1.2, and since `_fetch`
+# ignores `url` entirely, the bytes would follow the stale id. That failure is silent: the checksum it
+# computes belongs to the artifact it actually downloaded.
+#
+# The release name travels in the cask's `data:` stanza. Only `CurlPostDownloadStrategy` ever reads
 # `meta[:data]` (to build POST parameters); under `CurlDownloadStrategy` the key is inert, so it is
 # free to carry our own metadata. Do not combine a `data:` stanza with `using: :post` in this tap.
 class BmdDownloadStrategy < CurlDownloadStrategy
   RESOLVE_ENDPOINT = "https://www.blackmagicdesign.com/api/register/%<country>s/download/%<id>s"
   SITE = "https://www.blackmagicdesign.com"
-  DEFAULT_COUNTRY = "au"
 
   # Blackmagic's resolve endpoint answers `400 Bad Request` to any request whose User-Agent contains
   # the substring "curl" — a filter on the name alone, not on the client. Homebrew's default User-Agent
@@ -39,10 +47,10 @@ class BmdDownloadStrategy < CurlDownloadStrategy
   sig { params(url: String, name: String, version: T.untyped, meta: T.untyped).void }
   def initialize(url, name, version, **meta)
     super
-    @download_id = meta.dig(:data, "downloadId")
-    return if @download_id.present?
+    @release = meta.dig(:data, "release")
+    return if @release.present?
 
-    raise ArgumentError, "#{self.class.name} requires a `data: { \"downloadId\" => \"...\" }` stanza"
+    raise ArgumentError, "#{self.class.name} requires a `data: { \"release\" => \"...\" }` stanza"
   end
 
   private
@@ -60,7 +68,8 @@ class BmdDownloadStrategy < CurlDownloadStrategy
   end
 
   def _fetch(url:, resolved_url:, timeout:)
-    signed_url = mint_signed_url(timeout:)
+    download_id = BmdCatalog.mac_download_id(@release, timeout:)
+    signed_url = mint_signed_url(download_id, timeout:)
     ohai "Minted a signed URL from #{SITE}" unless quiet?
     _curl_download signed_url, temporary_path, timeout
   end
@@ -70,8 +79,8 @@ class BmdDownloadStrategy < CurlDownloadStrategy
   #
   # `retries: 0` is deliberate: this POST registers a download, so it must not be replayed
   # automatically. `user_agent:` overrides Homebrew's default for the reason given at `USER_AGENT`.
-  def mint_signed_url(timeout: nil)
-    endpoint = format(RESOLVE_ENDPOINT, country:, id: @download_id)
+  def mint_signed_url(download_id, timeout: nil)
+    endpoint = format(RESOLVE_ENDPOINT, country:, id: download_id)
 
     result = curl_output(
       "--request", "POST",
@@ -114,6 +123,6 @@ class BmdDownloadStrategy < CurlDownloadStrategy
   end
 
   def country
-    ENV.fetch("BMD_TAP_COUNTRY", DEFAULT_COUNTRY)
+    BmdCatalog.country
   end
 end

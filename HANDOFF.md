@@ -45,6 +45,10 @@ per *(release × platform)* and is what the resolve endpoint takes. Posting a re
 `400 The download id '…' was not found`. Historic versions retain fixed downloadIds, so they look
 permanent.
 
+**The catalog is a full history, not a "latest" list** — 1220 entries; Ethernet Switch 1.0, 1.1 and
+1.2 are all in it and Desktop Video has 168. Load-bearing since #8: a cask pinned behind the current
+release still finds its downloadId, and 1.1's id still resolves to a signed URL today.
+
 ### 2. Version pointer
 `GET https://www.blackmagicdesign.com/api/support/latest-stable-version/{product}/{platform}`
 → `{"mac":{"releaseId":…,"downloadId":…,"major":21,"minor":0,"releaseNum":4}}`. Omit the platform to
@@ -85,9 +89,13 @@ https://github.com/orgs/Homebrew/discussions/574).
 Both verified working. `product` is **optional** (tested). `country` is **required** (omitting → 400).
 Anonymous body against a registration-required item → `403 Must register to be able to perform the download`.
 
-**Throttle:** back-to-back POSTs return a bare `400 Bad Request`; ~30s spacing always worked.
-Irrelevant for one-resolve-per-install, but the phase-3 scraper must pace itself or it will read
-spurious 400s as failures.
+~~**Throttle:** back-to-back POSTs return a bare `400 Bad Request`; ~30s spacing always worked.~~
+**There is no throttle** (established in #2). The bare `400` is a User-Agent filter: this endpoint
+rejects any request whose UA contains the substring `curl` — a match on the name alone, so
+`curl-lover/1.0` is rejected too and Homebrew's own UA with the `curl/8.7.1` suffix stripped is
+accepted. An empty UA works; see `BmdDownloadStrategy::USER_AGENT`. Three back-to-back POSTs all
+succeeded, so nothing forces a pacing floor on the phase-3 scraper. Only this endpoint filters —
+`downloads.json` on the same host and the artifact host do not.
 
 **Artifact identity is stable across resolves.** Two resolves of the same downloadId returned
 different signatures pointing at the same S3 object (identical `content-length: 368867738`, stable
@@ -116,9 +124,17 @@ cache on `Digest::SHA256.hexdigest(url)`. A signed URL differs every resolve →
 entry per install, and `brew fetch` followed by `brew install` would re-download. The unsigned path
 is stable, encodes the version, and keeps the cask auditable. It is never actually fetched.
 
-**`bmd_download_id` hardcoded per cask** (not looked up at install time). Both drift modes are loud:
+~~**`bmd_download_id` hardcoded per cask** (not looked up at install time). Both drift modes are loud:
 a retired ID fails at resolve time with BMD's own message; a respun artifact fails on checksum.
-Catalog lookup belongs in the scraper, not the installer.
+Catalog lookup belongs in the scraper, not the installer.~~
+
+**Reversed in #8.** The cask names the release (`data: { "release" => "Blackmagic Ethernet Switch
+#{version}" }`) and `BmdCatalog.mac_download_id` looks the id up at fetch time. The drift argument
+covered a *retired* id, not a *stale* one — and a version bump produces exactly a stale one.
+`brew bump-cask-pr` rewrites only `version`, `url` and `sha256`, and `_fetch` ignores `url`, so a
+pinned id would have it download the old artifact, pin that artifact's checksum under the new version
+number, and install 1.2 while claiming 1.3 — the one drift mode that is silent. Cost of the lookup is
+226 KB / ~2 s against a 352 MB download, and none at all on a cache hit.
 
 **Real pinned `sha256`**, never `:no_check`.
 
@@ -136,6 +152,21 @@ the user is the party registering, the tap is just their HTTP client.
 
 **On failure: no retry.** Print BMD's response body plus a one-line explanation, exit non-zero.
 Never prompt interactively from inside a download strategy (breaks `--quiet`, CI, parallel installs).
+
+**Requires go *inside* the `cask` block, and use `require`, not `require_relative`.** Both are forced
+by `brew bump-cask-pr`, which reloads the cask from its own *contents* twice (`bump-cask-pr.rb:322`
+and `:356`) to compute the new checksum:
+
+- `FromContentLoader.try_new` accepts only content matching `/\A\s*cask ... end\s*\Z/m`
+  (`cask/cask_loader.rb:80-93`), so a `require` line above the block makes the file unloadable —
+  `Error: Cask <the entire file, downcased> is unavailable: No Cask with this name exists.`
+- that loader `instance_eval`s the contents with `Library/Homebrew` as the base, so
+  `require_relative "../lib/…"` resolves to `/opt/homebrew/Library/Homebrew/lib/…` and raises
+  LoadError. `require Tap.fetch("mateusz-plociennik/blackmagic").path/"lib/…"` works under every
+  loader (`require` accepts a Pathname via `#to_path`).
+
+Neither shows up under `brew install`, `fetch`, `livecheck`, `audit`, `style` or `test-bot` — only
+`bump-cask-pr` reloads from contents, so this is exactly the trap that would have surfaced in phase 3.
 
 **Cask tokens prefixed `blackmagic-*`.** Verified in `cask/cask_loader.rb:592-626`: homebrew/cask
 silently wins any token collision, and 2+ third-party matches raise `TapCaskAmbiguityError`. The
@@ -180,7 +211,8 @@ Multi-GB downloads — slow to iterate on.
 ### Deferred (phase 3, explicitly out of scope)
 
 - Catalog scraper emitting `brew bump-cask-pr` (which rewrites `version` + `sha256` and opens a PR)
-  rather than hand-editing cask files. Must pace requests ≥30s.
+  rather than hand-editing cask files. No pacing floor (see the resolve endpoint above), and since #8
+  `--version` is sufficient — the downloadId follows from the version.
 - The 223 `requiresTermsAndConditions` products. A cask that programmatically accepts a licence on
   the user's behalf must display the terms (present in the catalog JSON as `termsAndConditions`) and
   require an explicit opt-in in the config. Do not design this until a T&C product is actually in scope.
