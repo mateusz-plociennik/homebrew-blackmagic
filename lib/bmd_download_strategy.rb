@@ -30,9 +30,13 @@ require_relative "bmd_catalog"
 # ignores `url` entirely, the bytes would follow the stale id. That failure is silent: the checksum it
 # computes belongs to the artifact it actually downloaded.
 #
-# The release name travels in the cask's `data:` stanza. Only `CurlPostDownloadStrategy` ever reads
+# The product name travels in the cask's `data:` stanza; the version comes from the cask's `version`
+# stanza, which is where Homebrew already keeps it. Only `CurlPostDownloadStrategy` ever reads
 # `meta[:data]` (to build POST parameters); under `CurlDownloadStrategy` the key is inert, so it is
 # free to carry our own metadata. Do not combine a `data:` stanza with `using: :post` in this tap.
+#
+# The product is named rather than the whole release because release names carry an optional ` Update`
+# suffix on point releases that a cask cannot derive from its version — see `BmdCatalog::OPTIONAL_SUFFIX`.
 class BmdDownloadStrategy < CurlDownloadStrategy
   RESOLVE_ENDPOINT = "https://www.blackmagicdesign.com/api/register/%<country>s/download/%<id>s"
   SITE = "https://www.blackmagicdesign.com"
@@ -47,10 +51,10 @@ class BmdDownloadStrategy < CurlDownloadStrategy
   sig { params(url: String, name: String, version: T.untyped, meta: T.untyped).void }
   def initialize(url, name, version, **meta)
     super
-    @release = meta.dig(:data, "release")
-    return if @release.present?
+    @product = meta.dig(:data, "product")
+    return if @product.present?
 
-    raise ArgumentError, "#{self.class.name} requires a `data: { \"release\" => \"...\" }` stanza"
+    raise ArgumentError, "#{self.class.name} requires a `data: { \"product\" => \"...\" }` stanza"
   end
 
   private
@@ -68,7 +72,7 @@ class BmdDownloadStrategy < CurlDownloadStrategy
   end
 
   def _fetch(url:, resolved_url:, timeout:)
-    download_id = BmdCatalog.mac_download_id(@release, timeout:)
+    download_id = BmdCatalog.mac_download_id(@product, version.to_s, timeout:)
     signed_url = mint_signed_url(download_id, timeout:)
     ohai "Minted a signed URL from #{SITE}" unless quiet?
     _curl_download signed_url, temporary_path, timeout
