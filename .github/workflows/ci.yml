@@ -45,3 +45,9 @@ jobs:
         # `test-bot --only-tap-syntax` is style and audit; it runs no behaviour. `brew ruby` is what can
         # load `utils/curl`, which `BmdCatalog` requires. The tests themselves make no network calls.
         run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/bmd_catalog_test.rb"
+
+      - name: Run the cask generator tests
+        run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/bmd_cask_generator_test.rb"
+
+      - name: Run the missing-products report tests
+        run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/bmd_product_report_test.rb"

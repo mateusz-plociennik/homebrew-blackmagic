@@ -1,0 +1,40 @@
+#!/usr/bin/env ruby
+# typed: false
+# frozen_string_literal: true
+
+# Bootstraps casks from Blackmagic's catalog, readme and artifact (#10), and reports Blackmagic
+# products with neither a cask nor a recorded reason (#11). Run with `brew ruby`:
+#
+#   brew ruby bin/generate-cask "Blackmagic Ethernet Switch"
+#   brew ruby bin/generate-cask --report-missing
+#
+# Runs locally, not in CI — introspection means downloading 350 MB-several GB per product, and
+# you're downloading it locally to install-verify anyway.
+
+require_relative "../lib/bmd_cask_generator"
+
+def usage
+  <<~USAGE
+    Usage:
+      brew ruby bin/generate-cask "<Product Name>" [<version>]
+      brew ruby bin/generate-cask --report-missing
+  USAGE
+end
+
+case ARGV.first
+when nil, "-h", "--help"
+  puts usage
+  exit(ARGV.empty? ? 1 : 0)
+when "--report-missing"
+  require_relative "../lib/bmd_product_report"
+  BmdProductReport.run
+else
+  product_name, version = ARGV
+  begin
+    path = BmdCaskGenerator.generate(product_name, version:)
+    puts "Wrote #{path}"
+  rescue BmdCaskGenerator::GeneratorError, BmdCatalog::CatalogError => e
+    warn "generate-cask: #{e.message}"
+    exit 1
+  end
+end

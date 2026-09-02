@@ -13,41 +13,7 @@
 # --only-tap-syntax`, which is style and audit, not behaviour. Hence this file.
 
 require_relative "../lib/bmd_catalog"
-
-# Holds what failed. A wrapper object rather than a bare `FAILURES = []`, because Homebrew's style
-# rules — which `brew test-bot --only-tap-syntax` runs over this directory — require a constant to be
-# frozen, and a frozen array cannot be appended to. Freezing the wrapper leaves `list` mutable.
-class Failures
-  attr_reader :list
-
-  def initialize
-    @list = []
-  end
-end
-
-FAILURES = Failures.new.freeze
-
-def check(description)
-  result = yield
-  raise "expected a truthy result, got #{result.inspect}" unless result
-
-  puts "  ok  #{description}"
-rescue => e
-  FAILURES.list << "#{description}\n        #{e.message.lines.first.to_s.strip}"
-  puts "FAIL  #{description}"
-end
-
-# Asserts that `block` raises `BmdCatalog::CatalogError` and that its message mentions `expected`,
-# because these messages are the whole diagnostic when a lookup fails mid-install.
-def check_raises(description, expected)
-  begin
-    yield
-  rescue BmdCatalog::CatalogError => e
-    return check(description) { e.message.include?(expected) }
-  end
-
-  check(description) { raise "no CatalogError raised" }
-end
+require_relative "support"
 
 def release(name, download_id: "id-for-#{name}", platform: BmdCatalog::PLATFORM)
   { "name" => name, "urls" => { platform => [{ "downloadId" => download_id }] } }
@@ -130,28 +96,30 @@ check("does not confuse a longer product name for its prefix") do
 end
 
 # A version is matched whole, not as a prefix: a cask pinned at `10` must not settle for `10.2`.
-check_raises("does not treat a version as a prefix of a longer one", 'no release "Blackmagic Camera 10"') do
+check_raises("does not treat a version as a prefix of a longer one", BmdCatalog::CatalogError,
+             'no release "Blackmagic Camera 10"') do
   BmdCatalog.find_mac_release(CATALOG, "Blackmagic Camera", "10")
 end
 
-check_raises("names the product and version when nothing matches", "Blackmagic Camera 9.9") do
+check_raises("names the product and version when nothing matches", BmdCatalog::CatalogError,
+             "Blackmagic Camera 9.9") do
   BmdCatalog.find_mac_release(CATALOG, "Blackmagic Camera", "9.9")
 end
 
 # No (product, version) pair in the catalog carries both a bare and an ` Update` name today — all
 # 977 pairs were checked. Should upstream ever ship both, guessing which one a cask meant would pin
 # a checksum against an artifact chosen by luck, so refuse instead and say what was found.
-check_raises("refuses to guess between two matches", "matches 2 releases") do
+check_raises("refuses to guess between two matches", BmdCatalog::CatalogError, "matches 2 releases") do
   both = [release("HyperDeck 9.0.2"), release("HyperDeck 9.0.2 Update")]
   BmdCatalog.find_mac_release(both, "HyperDeck", "9.0.2")
 end
 
-check_raises("reports a release that has no macOS build", "no Mac OS X build") do
+check_raises("reports a release that has no macOS build", BmdCatalog::CatalogError, "no Mac OS X build") do
   windows_only = [release("HyperDeck 9.0.2", platform: "Windows")]
   BmdCatalog.find_mac_release(windows_only, "HyperDeck", "9.0.2")
 end
 
-check_raises("reports a macOS build with no downloadId", "no Mac OS X build") do
+check_raises("reports a macOS build with no downloadId", BmdCatalog::CatalogError, "no Mac OS X build") do
   no_id = [release("HyperDeck 9.0.2", download_id: nil)]
   BmdCatalog.find_mac_release(no_id, "HyperDeck", "9.0.2")
 end
@@ -175,11 +143,4 @@ check("ignores releases with no macOS build") do
   BmdCatalog::MAC_RELEASES.call(json, CAMERA).compact.empty?
 end
 
-puts
-if FAILURES.list.empty?
-  puts "All checks passed."
-else
-  puts "#{FAILURES.list.size} failed:"
-  FAILURES.list.each { |failure| puts "  - #{failure}" }
-  exit 1
-end
+report_failures!
