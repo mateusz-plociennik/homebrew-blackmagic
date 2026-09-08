@@ -40,17 +40,16 @@ module BmdCaskGenerator
   }.freeze
 
   # The oldest macOS a pkg's own installer check can name, mapped to the oldest symbol Homebrew can
-  # still express for it. Homebrew dropped `:mojave`; `:catalina` is the floor, so anything the pkg
-  # requires below 10.15 still gets `:catalina` — Homebrew no longer runs on anything older anyway.
+  # still express for it. Homebrew no longer supports Catalina, so anything below macOS 11 gets
+  # `:big_sur`.
   MACOS_SYMBOLS = {
-    "10.15" => :catalina,
-    "11"    => :big_sur,
-    "12"    => :monterey,
-    "13"    => :ventura,
-    "14"    => :sonoma,
-    "15"    => :sequoia,
-    "26"    => :tahoe,
-    "27"    => :golden_gate,
+    "11" => :big_sur,
+    "12" => :monterey,
+    "13" => :ventura,
+    "14" => :sonoma,
+    "15" => :sequoia,
+    "26" => :tahoe,
+    "27" => :golden_gate,
   }.freeze
 
   # Helper-app basenames that shadow the product rather than naming it — a `brew search` for
@@ -103,7 +102,9 @@ module BmdCaskGenerator
     end
 
     # The regex a cask's `uninstall pkgutil:` stanza passes to `pkgutil --pkgs=`: the longest common
-    # prefix of every receipt identifier, plus `.*` — never a shell glob's bare `*`.
+    # prefix of every receipt identifier, plus `.*` — never a shell glob's bare `*`. A prefix ending
+    # at a namespace separator or with a suspiciously short product segment is too broad to use, so
+    # preserve the exact identifiers as an alternation instead.
     def pkgutil_regex_for(identifiers)
       raise ArgumentError, "no pkg identifiers given" if identifiers.empty?
       return identifiers.first if identifiers.size == 1
@@ -113,6 +114,9 @@ module BmdCaskGenerator
                           .map(&:first)
                           .join
       raise GeneratorError, "pkg receipts share no common prefix: #{identifiers.join(", ")}" if prefix.empty?
+      product_prefix = prefix.split(".").last
+      return "(?:#{identifiers.map { |identifier| Regexp.escape(identifier) }.join("|")})" if
+        prefix.end_with?(".") || product_prefix.length < 4
 
       "#{prefix}.*"
     end
@@ -150,7 +154,7 @@ module BmdCaskGenerator
           version #{version.dump}
           sha256 #{sha256.dump}
 
-          url #{url_template.dump},
+          url #{url_template.dump.gsub('\#{version}', '#{version}')},
               using: BmdDownloadStrategy,
               data:  { "product" => #{product.dump} }
           name #{name_line}
@@ -163,7 +167,7 @@ module BmdCaskGenerator
             strategy :json, &BmdCatalog::MAC_RELEASES
           end
         #{"\n  depends_on macos: :#{macos_symbol}\n" if macos_symbol}
-          pkg #{pkg_filename.dump}
+          pkg #{pkg_filename.dump.gsub('\#{version}', '#{version}')}
 
           uninstall pkgutil: #{pkgutil_regex.dump}
         end

@@ -42,7 +42,7 @@ cask "blackmagic-ethernet-switch" do
   end
 
   # The .zip contains a .dmg containing the .pkg; Homebrew unpacks nested archives for us.
-  depends_on :macos
+  depends_on macos: :big_sur
 
   pkg "Install Ethernet Switch #{version}.pkg"
 
