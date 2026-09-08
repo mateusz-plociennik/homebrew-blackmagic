@@ -21,7 +21,7 @@ end
 
 puts "\nproducts"
 
-CATALOG = [
+PRODUCT_CATALOG = [
   sample_release("Blackmagic Camera 10.2"),
   sample_release("Blackmagic Camera 10.2.2 Update", numeric_date: 2),
   sample_release("Blackmagic Camera 10.2 SDK"),
@@ -31,24 +31,25 @@ CATALOG = [
 ].freeze
 
 check("groups releases by base name, stripping version and Update") do
-  BmdProductReport.products(CATALOG).keys.sort ==
+  BmdProductReport.products(PRODUCT_CATALOG).keys.sort ==
     ["Blackmagic Camera", "Blackmagic Ethernet Switch", "Blackmagic RAW SDK"]
 end
 
 check("drops releases matching the SDK regex before grouping") do
-  BmdProductReport.products(CATALOG)["Blackmagic Camera"][:count] == 2
+  BmdProductReport.products(PRODUCT_CATALOG)["Blackmagic Camera"][:count] == 2
 end
 
 check("drops releases matching the beta regex before grouping") do
-  BmdProductReport.products(CATALOG)["Blackmagic Camera"][:latest]["name"].exclude?("Beta")
+  BmdProductReport.products(PRODUCT_CATALOG)["Blackmagic Camera"][:latest]["name"].exclude?("Beta")
 end
 
 check("a product whose own name contains SDK still groups (only the release-name pattern is a skip)") do
-  BmdProductReport.products(CATALOG).key?("Blackmagic RAW SDK")
+  BmdProductReport.products(PRODUCT_CATALOG).key?("Blackmagic RAW SDK")
 end
 
 check("picks the latest release by numericDate as the group's representative") do
-  BmdProductReport.products(CATALOG)["Blackmagic Camera"][:latest]["name"] == "Blackmagic Camera 10.2.2 Update"
+  BmdProductReport.products(PRODUCT_CATALOG)["Blackmagic Camera"][:latest]["name"] ==
+    "Blackmagic Camera 10.2.2 Update"
 end
 
 puts "\nmissing"
