@@ -84,9 +84,9 @@ puts "\nstale_skip_entries"
 
 check("flags a skip entry whose reason names a now-closed issue") do
   entries = BmdProductReport.stale_skip_entries(Set[3, 6]) # #3, #6 open; everything else closed
-  entries.any? { |e| e.start_with?("Blackmagic eGPU") } # names no issue -> never flagged
   flagged = BmdProductReport.stale_skip_entries(Set.new) # nothing open
-  flagged.any? { |e| e.start_with?("DaVinci Resolve:") }
+  entries.none? { |e| e.start_with?("Blackmagic eGPU") } &&
+    flagged.any? { |e| e.start_with?("DaVinci Resolve:") }
 end
 
 check("does not flag a skip entry whose issue is still open") do

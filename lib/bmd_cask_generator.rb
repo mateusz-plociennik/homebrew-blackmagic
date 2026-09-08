@@ -24,6 +24,7 @@ module BmdCaskGenerator
   FAMILY_HOMEPAGE_TEMPLATE = "https://www.blackmagicdesign.com/support/family/%<slug>s"
   RESOLVE_ENDPOINT = "https://www.blackmagicdesign.com/api/register/%<country>s/download/%<id>s"
   SITE = "https://www.blackmagicdesign.com"
+  HTTP_STATUS_WRITE_OUT = format("%%%<token>s", token: "{http_code}").freeze
 
   # Same empty override as `BmdDownloadStrategy::USER_AGENT` — the resolve endpoint 400s any UA
   # containing "curl", which is Homebrew's default. Duplicated rather than shared because that file
@@ -136,35 +137,35 @@ module BmdCaskGenerator
     def render_cask(token:, version:, sha256:, product:, url_template:, name_list:, desc:, homepage:,
                     macos_symbol:, pkg_filename:, pkgutil_regex:)
       name_line = if name_list.size == 1
-        "\"#{name_list.first}\""
+        name_list.first.dump
       else
-        name_list.map { |n| "\"#{n}\"" }.join(", ")
+        name_list.map(&:dump).join(", ")
       end
 
       <<~CASK
-        cask "#{token}" do
-          require Tap.fetch("#{TAP_NAME}").path/"lib/bmd_catalog"
-          require Tap.fetch("#{TAP_NAME}").path/"lib/bmd_download_strategy"
+        cask #{token.dump} do
+          require Tap.fetch(#{TAP_NAME.dump}).path/"lib/bmd_catalog"
+          require Tap.fetch(#{TAP_NAME.dump}).path/"lib/bmd_download_strategy"
 
-          version "#{version}"
-          sha256 "#{sha256}"
+          version #{version.dump}
+          sha256 #{sha256.dump}
 
-          url "#{url_template}",
+          url #{url_template.dump},
               using: BmdDownloadStrategy,
-              data:  { "product" => "#{product}" }
+              data:  { "product" => #{product.dump} }
           name #{name_line}
-          desc "#{desc}"
-          homepage "#{homepage}"
+          desc #{desc.dump}
+          homepage #{homepage.dump}
 
           livecheck do
             url BmdCatalog::CATALOG_URL
-            regex BmdCatalog.release_regex("#{product}")
+            regex BmdCatalog.release_regex(#{product.dump})
             strategy :json, &BmdCatalog::MAC_RELEASES
           end
         #{"\n  depends_on macos: :#{macos_symbol}\n" if macos_symbol}
-          pkg "#{pkg_filename}"
+          pkg #{pkg_filename.dump}
 
-          uninstall pkgutil: "#{pkgutil_regex}"
+          uninstall pkgutil: #{pkgutil_regex.dump}
         end
       CASK
     end
@@ -200,7 +201,13 @@ module BmdCaskGenerator
       end
 
       version_string = release["name"][BmdCatalog.release_regex(product_name), 1]
-      download_id = release.dig("urls", BmdCatalog::PLATFORM).first.fetch("downloadId")
+      download_id = release.dig("urls", BmdCatalog::PLATFORM, 0, "downloadId")
+      unless download_id.present?
+        raise GeneratorError,
+              <<~MESSAGE
+                Blackmagic's catalog lists "#{release["name"]}" but its Mac OS X build has no downloadId.
+              MESSAGE
+      end
       release_id = release.fetch("id")
 
       readme_html = fetch_readme(release_id, timeout:)
@@ -246,7 +253,13 @@ module BmdCaskGenerator
       end
       raise GeneratorError, "Blackmagic's catalog has no macOS release for \"#{product}\"." if candidates.empty?
 
-      candidates.max_by { |entry| entry["name"][pattern, 1].split(".").map(&:to_i) }
+      release = candidates.max_by { |entry| entry["name"][pattern, 1].split(".").map(&:to_i) }
+      return release if release.dig("urls", BmdCatalog::PLATFORM, 0, "downloadId").present?
+
+      raise GeneratorError,
+            <<~MESSAGE
+              Blackmagic's catalog lists "#{release["name"]}" but its Mac OS X build has no downloadId.
+            MESSAGE
     end
 
     def fetch_readme(release_id, timeout: nil)
@@ -261,7 +274,7 @@ module BmdCaskGenerator
     end
 
     def homepage_ok?(url, timeout: nil)
-      result = Utils::Curl.curl_output("--silent", "--output", File::NULL, "--write-out", "%{http_code}", url,
+      result = Utils::Curl.curl_output("--silent", "--output", File::NULL, "--write-out", HTTP_STATUS_WRITE_OUT, url,
                                        timeout:)
       result.success? && result.stdout.strip == "200"
     end
@@ -291,7 +304,7 @@ module BmdCaskGenerator
       )
 
       response = result.stdout.strip
-      unless result.success? && response.start_with?("https://")
+      if !result.success? || !response.start_with?("https://")
         raise GeneratorError,
               "Blackmagic Design refused to issue a download URL: #{response.presence || "(empty)"}"
       end
@@ -325,9 +338,9 @@ module BmdCaskGenerator
       dmgs = Dir.glob(File.join(unzip_dir, "*.dmg"))
       other = Dir.entries(unzip_dir) - %w[. ..] - dmgs.map { |d| File.basename(d) }
       if dmgs.size != 1
-        raise GeneratorError, "unrecognised artifact shape: expected exactly one .dmg in the zip, found #{(dmgs.map do |d|
-          File.basename(d)
-        end + other).inspect}"
+        found = dmgs.map { |d| File.basename(d) } + other
+        raise GeneratorError,
+              "unrecognised artifact shape: expected exactly one .dmg in the zip, found #{found.inspect}"
       end
 
       mountpoint = File.join(work_dir, "mnt")

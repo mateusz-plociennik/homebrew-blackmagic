@@ -2,6 +2,10 @@
 # frozen_string_literal: true
 
 require "json"
+# The tap test runner preloads Set, but this module also runs as a standalone Ruby script.
+# rubocop:disable Lint/RedundantRequireStatement
+require "set" unless defined?(Set)
+# rubocop:enable Lint/RedundantRequireStatement
 
 require_relative "bmd_catalog"
 require_relative "bmd_skip_list"
@@ -55,7 +59,9 @@ module BmdProductReport
         numbers = reason.scan(/#(\d+)/).flatten.map(&:to_i)
         next if numbers.empty? || numbers.any? { |n| open_issue_numbers.include?(n) }
 
-        "#{name}: \"#{reason}\" names #{(numbers.size == 1) ? "an issue" : "issues"} that #{(numbers.size == 1) ? "is" : "are"} no longer open"
+        noun = (numbers.size == 1) ? "an issue" : "issues"
+        verb = (numbers.size == 1) ? "is" : "are"
+        "#{name}: \"#{reason}\" names #{noun} that #{verb} no longer open"
       end
     end
 
@@ -113,8 +119,11 @@ module BmdProductReport
     private
 
     def report(missing_products, stale)
-      if (existing = find_open_issue)
-        puts "#{missing_products.size} product(s) missing a cask, but ##{existing} already reports this set. Not re-filing."
+      if (existing = find_open_issue(missing_products.keys))
+        puts <<~MESSAGE
+          #{missing_products.size} product(s) missing a cask, but ##{existing} already reports this set.
+          Not re-filing.
+        MESSAGE
         return
       end
 
@@ -122,11 +131,21 @@ module BmdProductReport
       IO.popen(["gh", "issue", "create", "--title", ISSUE_TITLE, "--body-file", "-"], "w") { |io| io.write(body) }
     end
 
-    def find_open_issue
-      out = `gh issue list --state open --search #{ISSUE_TITLE.inspect} --json number,title 2>/dev/null`
-      JSON.parse(out).find { |issue| issue["title"] == ISSUE_TITLE }&.fetch("number")
+    def find_open_issue(missing_names)
+      out = `gh issue list --state open --search #{ISSUE_TITLE.inspect} --json number,title,body 2>/dev/null`
+      expected = missing_names.sort
+      JSON.parse(out).find do |issue|
+        issue["title"] == ISSUE_TITLE && issue_products(issue["body"]) == expected
+      end&.fetch("number")
     rescue JSON::ParserError
       nil
+    end
+
+    def issue_products(body)
+      body.to_s.lines.filter_map do |line|
+        match = line.match(/\A\|\s+(.+?)\s+\|\s+\d+\s+\|/)
+        match[1] if match
+      end.sort
     end
 
     def open_issue_numbers
