@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+
+repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+cd "$repo_root"
+
+brew test-bot --only-tap-syntax
+brew ruby test/bmd_catalog_test.rb
+brew ruby test/bmd_cask_generator_test.rb
+brew ruby test/bmd_product_report_test.rb
