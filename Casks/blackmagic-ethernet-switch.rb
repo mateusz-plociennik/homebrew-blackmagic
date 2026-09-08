@@ -41,11 +41,9 @@ cask "blackmagic-ethernet-switch" do
     strategy :json, &BmdCatalog::MAC_RELEASES
   end
 
-  # The pkg's own installer check refuses anything below 10.14 (Mojave), but Homebrew dropped that
-  # symbol — `:catalina` is the oldest version it can still express, and it no longer runs on 10.14.
-  depends_on macos: :catalina
-
   # The .zip contains a .dmg containing the .pkg; Homebrew unpacks nested archives for us.
+  depends_on :macos
+
   pkg "Install Ethernet Switch #{version}.pkg"
 
   # Three receipts: EthernetSwitch, EthernetSwitchAssets, EthernetSwitchUninstaller. This value is a
