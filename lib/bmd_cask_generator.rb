@@ -257,8 +257,12 @@ module BmdCaskGenerator
       end
       raise GeneratorError, "Blackmagic's catalog has no macOS release for \"#{product}\"." if candidates.empty?
 
+      downloadable = candidates.select do |entry|
+        entry.dig("urls", BmdCatalog::PLATFORM, 0, "downloadId").present?
+      end
+      return downloadable.max_by { |entry| entry["name"][pattern, 1].split(".").map(&:to_i) } if downloadable.any?
+
       release = candidates.max_by { |entry| entry["name"][pattern, 1].split(".").map(&:to_i) }
-      return release if release.dig("urls", BmdCatalog::PLATFORM, 0, "downloadId").present?
 
       raise GeneratorError,
             <<~MESSAGE
