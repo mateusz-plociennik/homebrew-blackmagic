@@ -132,7 +132,7 @@ module BmdProductReport
     end
 
     def find_open_issue(missing_names)
-      out = `gh issue list --state open --search #{ISSUE_TITLE.inspect} --json number,title,body 2>/dev/null`
+      out = `gh issue list --state open --limit 200 --search #{ISSUE_TITLE.inspect} --json number,title,body 2>/dev/null`
       expected = missing_names.sort
       JSON.parse(out).find do |issue|
         issue["title"] == ISSUE_TITLE && issue_products(issue["body"]) == expected
