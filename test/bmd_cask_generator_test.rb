@@ -80,7 +80,10 @@ puts "\nlatest_mac_release"
 
 check("skips a newer release without a macOS downloadId") do
   releases = [
-    { "name" => "Blackmagic Ethernet Switch 1.2", "urls" => { BmdCatalog::PLATFORM => [{ "downloadId" => "usable" }] } },
+    {
+      "name" => "Blackmagic Ethernet Switch 1.2",
+      "urls" => { BmdCatalog::PLATFORM => [{ "downloadId" => "usable" }] },
+    },
     { "name" => "Blackmagic Ethernet Switch 1.3", "urls" => { BmdCatalog::PLATFORM => [{}] } },
   ]
   BmdCaskGenerator.latest_mac_release(releases, "Blackmagic Ethernet Switch")["name"] ==

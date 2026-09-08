@@ -114,6 +114,7 @@ module BmdCaskGenerator
                           .map(&:first)
                           .join
       raise GeneratorError, "pkg receipts share no common prefix: #{identifiers.join(", ")}" if prefix.empty?
+
       product_prefix = prefix.split(".").last
       return "(?:#{identifiers.map { |identifier| Regexp.escape(identifier) }.join("|")})" if
         prefix.end_with?(".") || product_prefix.length < 4
