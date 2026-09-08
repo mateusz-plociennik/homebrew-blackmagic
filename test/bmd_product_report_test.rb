@@ -68,8 +68,9 @@ check("removing one skip-list entry makes exactly that product reappear") do
   # `reject { name == "Blackmagic Camera" }` is what "removing an entry" means for `missing`, since
   # `missing` calls `BmdSkipList::SKIP_PRODUCTS.key?(name)` directly.
   with_entry = BmdSkipList::SKIP_PRODUCTS.key?("Blackmagic Camera")
-  without_entry = BmdSkipList::SKIP_PRODUCTS.except("Blackmagic Camera").key?("Blackmagic Camera")
-  with_entry && !without_entry
+  without_entry = BmdSkipList::SKIP_PRODUCTS.dup
+  without_entry.delete("Blackmagic Camera")
+  with_entry && !without_entry.key?("Blackmagic Camera")
 end
 
 check("a product in neither Casks/ nor the skip-list is reported with the fields a human needs") do
