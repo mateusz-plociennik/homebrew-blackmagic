@@ -64,8 +64,8 @@ check("returns nil for a blank family") { BmdCaskGenerator.homepage_for_family(n
 
 puts "\nmacos_symbol_for"
 
-check("rounds a version below the oldest expressible symbol up to :catalina") do
-  BmdCaskGenerator.macos_symbol_for("10.14") == :catalina
+check("rounds a version below the oldest expressible symbol up to :big_sur") do
+  BmdCaskGenerator.macos_symbol_for("10.14") == :big_sur
 end
 
 check("matches an exact symbol version") { BmdCaskGenerator.macos_symbol_for("11") == :big_sur }
@@ -87,6 +87,24 @@ end
 
 check("returns a single identifier verbatim, with no wildcard") do
   BmdCaskGenerator.pkgutil_regex_for(["com.blackmagic-design.Foo"]) == "com.blackmagic-design.Foo"
+end
+
+check("uses exact alternatives when receipts share only a namespace") do
+  BmdCaskGenerator.pkgutil_regex_for(
+    ["com.blackmagic-design.CloudStore", "com.blackmagic-design.CloudStoreHelper"],
+  ) == "com.blackmagic-design.CloudStore.*"
+end
+
+check("does not emit a namespace-wide uninstall regex") do
+  BmdCaskGenerator.pkgutil_regex_for(
+    ["com.blackmagic-design.CloudStore", "com.blackmagic-design.VideoAssist"],
+  ) == "(?:com\\.blackmagic\\-design\\.CloudStore|com\\.blackmagic\\-design\\.VideoAssist)"
+end
+
+check("uses exact alternatives for a short product prefix") do
+  BmdCaskGenerator.pkgutil_regex_for(
+    ["com.blackmagic-design.Switcher", "com.blackmagic-design.Server"],
+  ) == "(?:com\\.blackmagic\\-design\\.Switcher|com\\.blackmagic\\-design\\.Server)"
 end
 
 puts "\nversioned_template"
