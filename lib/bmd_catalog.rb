@@ -4,6 +4,8 @@
 require "json"
 require "utils/curl"
 
+require_relative "bmd_config"
+
 # Blackmagic's release catalog — the tap's single source of truth for what upstream ships.
 #
 # `GET /api/support/{country}/downloads.json` is the only endpoint that enumerates releases, and it
@@ -23,7 +25,7 @@ require "utils/curl"
 # own UA and curl's default both get a 200 — so no override is needed here.
 module BmdCatalog
   # Releases are the same worldwide; the country segment only affects fields the tap ignores.
-  DEFAULT_COUNTRY = "au"
+  DEFAULT_COUNTRY = BmdConfig::DEFAULT_COUNTRY
   URL_TEMPLATE = "https://www.blackmagicdesign.com/api/support/%<country>s/downloads.json"
 
   # The URL `livecheck` reads. Deliberately not `country` — livecheck reports this string on failure,
@@ -79,8 +81,10 @@ module BmdCatalog
   end.freeze
 
   class << self
+    # Delegated so the country the catalog is read from and the country a download is registered in
+    # cannot disagree; `BmdConfig` owns both the default and the `BMD_TAP_COUNTRY` override.
     def country
-      ENV.fetch("BMD_TAP_COUNTRY", DEFAULT_COUNTRY)
+      BmdConfig.country
     end
 
     # The `downloadId` for the macOS build of a product's release, looked up by product name and
@@ -99,10 +103,37 @@ module BmdCatalog
       mac_download_id_from(releases(timeout:), product, version)
     end
 
+    # The whole catalog entry for a product's release, fetched fresh. What `BmdDownloadStrategy` reads:
+    # the entry carries both the download id and the `requiresRegistration` /
+    # `requiresTermsAndConditions` flags that decide which request body Blackmagic will accept, so
+    # taking the entry rather than just the id means no cask has to restate a flag that upstream owns
+    # and can change under it.
+    def mac_release(product, version, timeout: nil)
+      find_mac_release(releases(timeout:), product, version)
+    end
+
+    # The macOS `downloadId` on an entry already in hand. Present on every entry `find_mac_release`
+    # returns — it refuses the ones without.
+    def download_id_for(release)
+      release.dig("urls", PLATFORM).first.fetch("downloadId")
+    end
+
+    # Whether Blackmagic will reject an anonymous request for this release and demand a full set of
+    # identity fields (a `403 Must register to be able to perform the download`).
+    def requires_registration?(release)
+      release["requiresRegistration"].present?
+    end
+
+    # Whether the release additionally requires accepting a licence agreement. Deliberately unhandled
+    # — see #6 — so callers refuse rather than agree on the user's behalf.
+    def requires_terms?(release)
+      release["requiresTermsAndConditions"].present?
+    end
+
     # `mac_download_id` against an already-fetched catalog. Split out so the matching rules can be
     # tested without curling 1.5 MB from Blackmagic; see `test/bmd_catalog_test.rb`.
     def mac_download_id_from(releases, product, version)
-      find_mac_release(releases, product, version).dig("urls", PLATFORM).first.fetch("downloadId")
+      download_id_for(find_mac_release(releases, product, version))
     end
 
     # The one release of `product` at `version` that ships a macOS build.

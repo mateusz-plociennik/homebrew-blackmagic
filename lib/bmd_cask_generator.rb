@@ -190,10 +190,10 @@ module BmdCaskGenerator
         latest_mac_release(releases, product_name)
       end
 
-      if release["requiresRegistration"] || release["requiresTermsAndConditions"]
+      if BmdCatalog.requires_terms?(release)
         raise GeneratorError, <<~MESSAGE
-          "#{release["name"]}" requires registration and/or terms acceptance, which this generator
-          does not support yet (blocked on #3/#6).
+          "#{release["name"]}" requires accepting Blackmagic's licence terms, which this tap does not do
+          on anyone's behalf (blocked on #6).
         MESSAGE
       end
 
@@ -224,7 +224,7 @@ module BmdCaskGenerator
                  raise(GeneratorError, "#{release["name"]} has no relatedFamilies to derive a homepage from")
       raise GeneratorError, "homepage #{homepage} did not answer HTTP 200" unless homepage_ok?(homepage, timeout:)
 
-      signed_url = mint_signed_url(download_id, timeout:)
+      signed_url = mint_signed_url(download_id, registration: BmdCatalog.requires_registration?(release), timeout:)
 
       Dir.mktmpdir("bmd-generate-cask") do |dir|
         zip_path = File.join(dir, "artifact.zip")
@@ -288,9 +288,10 @@ module BmdCaskGenerator
       result.success? && result.stdout.strip == "200"
     end
 
-    # Mints a signed download URL, same request shape as `BmdDownloadStrategy` — anonymous only,
-    # since `generate` already refuses registration-gated releases above.
-    def mint_signed_url(download_id, timeout: nil)
+    # Mints a signed download URL, same request shape as `BmdDownloadStrategy` — including the
+    # registration fields when the release needs them, since scaffolding a registration-path cask means
+    # actually downloading its artifact. Terms-gated releases never reach here; `generate` refuses them.
+    def mint_signed_url(download_id, registration: false, timeout: nil)
       endpoint = format(RESOLVE_ENDPOINT, country: BmdCatalog.country, id: download_id)
       body = {
         "platform"     => BmdCatalog::PLATFORM,
@@ -299,6 +300,7 @@ module BmdCaskGenerator
         "country"      => BmdCatalog.country,
         "origin"       => "www.blackmagicdesign.com",
       }
+      body = body.merge(BmdConfig.registration_details, "hasAgreedToTerms" => true) if registration
 
       result = Utils::Curl.curl_output(
         "--request", "POST",
