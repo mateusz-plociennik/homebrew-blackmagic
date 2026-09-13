@@ -70,7 +70,10 @@ jobs:
           GH_TOKEN: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
-          open_prs=$(gh pr list --repo "$REPO" --state open --json headRefName --jq '.[].headRefName')
+          # `--limit` because `gh pr list` pages at 30 by default, and a bump PR that fell off the
+          # first page would have its branch read as orphaned and deleted out from under it.
+          open_prs=$(gh pr list --repo "$REPO" --state open --limit 500 --json headRefName \
+                       --jq '.[].headRefName')
           branches=$(gh api --paginate "repos/$REPO/git/matching-refs/heads/bump-" --jq '.[].ref' |
                        sed 's|^refs/heads/||')
           for branch in $branches; do
