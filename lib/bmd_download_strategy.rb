@@ -11,6 +11,7 @@ require "json"
 
 require_relative "bmd_catalog"
 require_relative "bmd_config"
+require_relative "bmd_terms"
 
 # Downloads Blackmagic Design installers.
 #
@@ -79,7 +80,7 @@ class BmdDownloadStrategy < CurlDownloadStrategy
 
   def _fetch(url:, resolved_url:, timeout:)
     release = BmdCatalog.mac_release(@product, version.to_s, timeout:)
-    refuse_terms!(release) if BmdCatalog.requires_terms?(release)
+    refuse_terms!(release, timeout:) if BmdCatalog.requires_terms?(release) && !BmdConfig.accepts_terms?
     registration = BmdCatalog.requires_registration?(release)
 
     signed_url = mint_signed_url(BmdCatalog.download_id_for(release), registration:, timeout:)
@@ -87,17 +88,26 @@ class BmdDownloadStrategy < CurlDownloadStrategy
     _curl_download signed_url, temporary_path, timeout
   end
 
-  # Some releases require accepting a licence agreement, which the tap will not do on the user's
-  # behalf: the terms live in the catalog entry and nothing here can show them and take an informed
-  # opt-in from inside a download strategy. Refusing before any bytes move is the honest outcome; #6
-  # is where that gets designed. The check reads upstream's flag rather than a cask attribute, so a
-  # release that gains terms after its cask was written stops working instead of silently agreeing.
-  def refuse_terms!(release)
-    raise CurlDownloadStrategyError.new(SITE, <<~MESSAGE)
-      "#{release["name"]}" requires accepting Blackmagic Design's licence terms, and this tap does not
-      accept licence terms on your behalf — see issue #6. Download it from
-      #{SITE}/support/ instead. Nothing has been downloaded.
-    MESSAGE
+  # Some releases require accepting a licence agreement. If the user has granted explicit opt-in
+  # in their config, we proceed; otherwise we refuse before any bytes move, displaying the agreement
+  # itself and the exact config change needed. The check reads upstream's flag rather than a cask
+  # attribute, so a release that gains terms after its cask was written stops working instead of
+  # silently agreeing.
+  #
+  # The catalog entry names the agreement rather than carrying it, so the text is fetched — see
+  # `BmdTerms`. If that fetch fails, `BmdTerms` raises and the install stops there: still a refusal,
+  # which is the safe direction, and never a demand to agree to a document we could not show.
+  def refuse_terms!(release, timeout: nil)
+    terms_text = BmdTerms.text(release["termsAndConditions"], timeout:)
+
+    message = +"\"#{release["name"]}\" requires accepting Blackmagic Design's licence agreement.\n\n"
+    message << "#{terms_text}\n\n"
+    message << "(#{BmdTerms.url(release["termsAndConditions"])})\n\n"
+    message << "If you agree to it, record that in #{BmdConfig.path}:\n\n"
+    message << "{ \"agreeToTerms\": true }\n\n"
+    message << "Nothing has been downloaded."
+
+    raise CurlDownloadStrategyError.new(SITE, message)
   end
 
   # Ask Blackmagic for a signed URL. Returns it as a bare string — the endpoint answers with the URL

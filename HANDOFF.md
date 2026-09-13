@@ -257,9 +257,24 @@ Still open: `conflicts_with` between free Resolve and Studio, once a Studio cask
   reads the catalog), diffs against the pinned version, checks GitHub for an existing bump PR, and
   calls `bump-cask-pr` to download, checksum and open. `.github/workflows/bump.yml` runs it daily.
   Since #8, `--version` is sufficient — the downloadId follows from the version.
-- The 223 `requiresTermsAndConditions` products. A cask that programmatically accepts a licence on
-  the user's behalf must display the terms (present in the catalog JSON as `termsAndConditions`) and
-  require an explicit opt-in in the config. Do not design this until a T&C product is actually in scope.
+- ~~The 223 `requiresTermsAndConditions` products.~~ **Built in #6.** `_fetch` refuses a release whose
+  catalog entry sets the flag unless the config file carries `"agreeToTerms": true`.
+  `BmdConfig.accepts_terms?` reads the file only — no environment variable — so acceptance cannot ride
+  along on one `brew install` invocation.
+
+  The note above (and the issue) said the terms text is in the catalog as `termsAndConditions`. It is
+  not: that field is a *slug* naming a licence document (`"bmd-braw-sdk-2"`), and six slugs cover all
+  224 gated macOS releases. The text comes from the modal Blackmagic's own download button opens,
+  `/support/modal/download-with-terms-start/<slug>`, which their `support-bundle.js` builds and
+  renders as step 2 of the download form; every `/api/…/terms…` shape 404s. `BmdTerms` fetches that
+  fragment and lifts the agreement out of its `<div class="tandc">`. If it cannot, it raises — the
+  install still stops, and the tap never asks anyone to agree to a document it could not show them.
+
+  No cask in the tap exercises this yet, because the two eligible products (`Blackmagic RAW`,
+  `Blackmagic Fairlight Sound Library`) are also registration-gated, and bootstrapping either means
+  downloading the artifact, which means someone accepting their licence first. Verified live instead:
+  `BmdCatalog.mac_release("Blackmagic RAW", "5.1")` → flag set, slug `bmd-braw-sdk-2`, refusal
+  carrying all 22.6 KB of the real agreement.
 
 ## Notes for the next agent
 

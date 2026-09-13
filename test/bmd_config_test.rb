@@ -165,4 +165,37 @@ check("lists every field the loader reads") do
   BmdConfig::FIELDS.all? { |name| BmdConfig.skeleton.include?(name.inspect) }
 end
 
+puts "\naccepts_terms?"
+
+check("returns false when the config file does not exist") do
+  with_config_dir(nil) { !BmdConfig.accepts_terms? }
+end
+
+check("returns false when agreeToTerms is not in the config") do
+  with_config_dir(FULL_CONFIG) { !BmdConfig.accepts_terms? }
+end
+
+check("returns true when agreeToTerms is set to true") do
+  config_with_terms = JSON.generate(DETAILS.merge("country" => "nz", "agreeToTerms" => true))
+  with_config_dir(config_with_terms) { BmdConfig.accepts_terms? }
+end
+
+check("returns false when agreeToTerms is set to false") do
+  config_with_false = JSON.generate(DETAILS.merge("country" => "nz", "agreeToTerms" => false))
+  with_config_dir(config_with_false) { !BmdConfig.accepts_terms? }
+end
+
+check("returns false when agreeToTerms is a string") do
+  config_with_string = JSON.generate(DETAILS.merge("country" => "nz", "agreeToTerms" => "true"))
+  with_config_dir(config_with_string) { !BmdConfig.accepts_terms? }
+end
+
+check("ignores an environment variable for agreeToTerms (only file matters)") do
+  config_no_terms = JSON.generate(DETAILS.merge("country" => "nz"))
+  # Derived, not spelled out: a typo'd name here would pass whether or not `accepts_terms?` reads the
+  # environment, which is the whole guarantee this check exists to hold.
+  env = { BmdConfig.env_var(BmdConfig::TERMS_FIELD) => "true" }
+  with_config_dir(config_no_terms, env:) { !BmdConfig.accepts_terms? }
+end
+
 report_failures!
