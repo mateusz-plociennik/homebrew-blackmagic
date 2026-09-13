@@ -76,6 +76,35 @@ end
 
 check("returns nil when the pkg enforces nothing") { BmdCaskGenerator.macos_symbol_for(nil).nil? }
 
+puts "\nparse_distribution"
+
+# The installer's own OS check, both ways round — Resolve writes the comparison with the literal
+# first, and reading only the other order scaffolded a cask with no `depends_on macos:` at all.
+DISTRIBUTION_TEMPLATE = <<~XML
+  <pkg-ref id="com.blackmagic-design.ManifestLite" installKBytes="1"/>
+  <script>
+  pm_install_check() {
+    if (%<comparison>s > 0) { my.result.type = 'Fatal'; return false; }
+    return true;
+  }
+  </script>
+XML
+
+check("reads a minimum OS from a literal-first comparison") do
+  xml = format(DISTRIBUTION_TEMPLATE, comparison: "system.compareVersions('15.0', system.version.ProductVersion)")
+  BmdCaskGenerator.parse_distribution(xml) == [["com.blackmagic-design.ManifestLite"], "15.0"]
+end
+
+check("reads a minimum OS from a ProductVersion-first comparison") do
+  xml = format(DISTRIBUTION_TEMPLATE, comparison: 'system.compareVersions(system.version.ProductVersion, "10.15")')
+  BmdCaskGenerator.parse_distribution(xml).last == "10.15"
+end
+
+check("returns no minimum OS when the installer checks nothing") do
+  xml = format(DISTRIBUTION_TEMPLATE, comparison: "0")
+  BmdCaskGenerator.parse_distribution(xml).last.nil?
+end
+
 puts "\nlatest_mac_release"
 
 check("skips a newer release without a macOS downloadId") do

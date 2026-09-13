@@ -52,6 +52,16 @@ module BmdCaskGenerator
     "27" => :golden_gate,
   }.freeze
 
+  # The version in a pkg's own `pm_install_check()` OS test, whichever way round the comparison is
+  # written. Both orders are in the wild — Ethernet Switch has
+  # `compareVersions(system.version.ProductVersion, "10.15") < 0`, Resolve has
+  # `compareVersions('15.0', system.version.ProductVersion) > 0` — and reading only the first silently
+  # scaffolded a cask with no `depends_on macos:` at all.
+  MIN_OS_PATTERNS = [
+    /pm_install_check.*?compareVersions\(\s*system\.version\.ProductVersion\s*,\s*["']([\d.]+)["']\s*\)/m,
+    /pm_install_check.*?compareVersions\(\s*["']([\d.]+)["']\s*,\s*system\.version\.ProductVersion\s*\)/m,
+  ].freeze
+
   # Helper-app basenames that shadow the product rather than naming it — a `brew search` for
   # "Ethernet Switch Setup" or "Uninstall Ethernet Switch" is not a thing anyone does.
   HELPER_APP_NAME = /\A(un)?install\b/i
@@ -224,7 +234,8 @@ module BmdCaskGenerator
                  raise(GeneratorError, "#{release["name"]} has no relatedFamilies to derive a homepage from")
       raise GeneratorError, "homepage #{homepage} did not answer HTTP 200" unless homepage_ok?(homepage, timeout:)
 
-      signed_url = mint_signed_url(download_id, registration: BmdCatalog.requires_registration?(release), timeout:)
+      signed_url = mint_signed_url(download_id, product: product_name,
+                                   registration: BmdCatalog.requires_registration?(release), timeout:)
 
       Dir.mktmpdir("bmd-generate-cask") do |dir|
         zip_path = File.join(dir, "artifact.zip")
@@ -291,16 +302,21 @@ module BmdCaskGenerator
     # Mints a signed download URL, same request shape as `BmdDownloadStrategy` — including the
     # registration fields when the release needs them, since scaffolding a registration-path cask means
     # actually downloading its artifact. Terms-gated releases never reach here; `generate` refuses them.
-    def mint_signed_url(download_id, registration: false, timeout: nil)
+    def mint_signed_url(download_id, product: nil, registration: false, timeout: nil)
       endpoint = format(RESOLVE_ENDPOINT, country: BmdCatalog.country, id: download_id)
       body = {
-        "platform"     => BmdCatalog::PLATFORM,
-        "policy"       => true,
-        "downloadOnly" => true,
-        "country"      => BmdCatalog.country,
-        "origin"       => "www.blackmagicdesign.com",
+        "platform" => BmdCatalog::PLATFORM,
+        "policy"   => true,
+        "country"  => BmdCatalog.country,
+        "origin"   => "www.blackmagicdesign.com",
       }
-      body = body.merge(BmdConfig.registration_details, "hasAgreedToTerms" => true) if registration
+      body = if registration
+        # `product` is what marks the request as a registration rather than an anonymous download; see
+        # `BmdDownloadStrategy#request_body`.
+        body.merge("product" => product, **BmdConfig.registration_details)
+      else
+        body.merge("downloadOnly" => true)
+      end
 
       result = Utils::Curl.curl_output(
         "--request", "POST",
@@ -416,9 +432,11 @@ module BmdCaskGenerator
     # A product distribution's own installer check — `pm_install_check()`'s `compareVersions` call
     # against `system.version.ProductVersion` — not the volume check, which tests the *target disk*
     # rather than the machine running the installer.
+    #
+    # `MIN_OS_PATTERNS` covers both argument orders.
     def parse_distribution(xml)
       identifiers = xml.scan(/<pkg-ref id="([^"]+)"[^>]*installKBytes="[^"]*"[^>]*>/).flatten
-      min_os_version = xml[/pm_install_check.*?compareVersions\(system\.version\.ProductVersion,\s*"([\d.]+)"\)/m, 1]
+      min_os_version = MIN_OS_PATTERNS.filter_map { |pattern| xml[pattern, 1] }.first
       [identifiers, min_os_version]
     end
 

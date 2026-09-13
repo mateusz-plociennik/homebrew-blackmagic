@@ -29,18 +29,18 @@ end
 
 # A config directory holding `config` (nil for no file), with every `BMD_TAP_*` variable cleared and
 # then `env` applied on top.
-def with_config_dir(config, env: {})
+def with_config_dir(config, env: {}, &block)
   Dir.mktmpdir("bmd-config-test") do |dir|
     path = File.join(dir, "bmd-tap")
     Dir.mkdir(path)
     File.write(File.join(path, "config.json"), config) unless config.nil?
 
     cleared = BmdConfig::FIELDS.to_h { |name| [BmdConfig.env_var(name), nil] }
-    with_env(cleared.merge("XDG_CONFIG_HOME" => dir).merge(env)) { yield }
+    with_env(cleared.merge("XDG_CONFIG_HOME" => dir).merge(env), &block)
   end
 end
 
-FULL_CONFIG = JSON.generate(DETAILS.merge("country" => "nz"))
+FULL_CONFIG = JSON.generate(DETAILS.merge("country" => "nz")).freeze
 
 puts "\npath"
 
@@ -160,7 +160,7 @@ end
 
 puts "\nskeleton"
 
-check("carries the real default for country") { BmdConfig.skeleton.include?(%("country": "au")) }
+check("carries the real default for country") { BmdConfig.skeleton.include?('"country": "au"') }
 check("lists every field the loader reads") do
   BmdConfig::FIELDS.all? { |name| BmdConfig.skeleton.include?(name.inspect) }
 end

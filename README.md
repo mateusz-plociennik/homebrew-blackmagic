@@ -3,8 +3,10 @@
 A Homebrew tap for Blackmagic Design software, installing directly from Blackmagic's official
 download endpoints instead of their web download form.
 
-> **Status: one cask works.** `blackmagic-ethernet-switch` installs and uninstalls end to end,
-> verified on macOS 26.5. Everything else is still tracked in the issues.
+> **Status: both paths work.** `blackmagic-ethernet-switch` (anonymous, zero setup) and
+> `blackmagic-davinci-resolve` (registration, needs the config file below) each install and uninstall
+> end to end, verified on macOS 26.5. The remaining casks are fetch- and audit-verified only, and
+> everything else is still tracked in the issues.
 
 ## Why this can't be a normal cask
 

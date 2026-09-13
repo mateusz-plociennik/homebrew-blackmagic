@@ -1,0 +1,16 @@
+#!/bin/sh
+# Prevent accidental force-pushes to main
+protected_branch="main"
+while read local_ref local_sha remote_ref remote_sha; do
+  if echo "$remote_ref" | grep -q "refs/heads/$protected_branch"; then
+    # Check if this is a force push (non-fast-forward)
+    if [ "$remote_sha" != "0000000000000000000000000000000000000000" ]; then
+      merge_base=$(git merge-base "$remote_sha" "$local_sha" 2>/dev/null)
+      if [ "$merge_base" != "$remote_sha" ]; then
+        echo "⚠️  Force push to '$protected_branch' blocked by pre-push hook."
+        echo "   Use --no-verify to override if intentional."
+        exit 1
+      fi
+    fi
+  fi
+done
