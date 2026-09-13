@@ -37,10 +37,10 @@ end
 
 def release_with_terms(name, terms_slug, requires_terms: true, download_id: "test-id")
   {
-    "name" => name,
+    "name"                       => name,
     "requiresTermsAndConditions" => requires_terms,
-    "termsAndConditions" => terms_slug,
-    "urls" => {
+    "termsAndConditions"         => terms_slug,
+    "urls"                       => {
       BmdCatalog::PLATFORM => [{ "downloadId" => download_id }],
     },
   }
@@ -48,9 +48,9 @@ end
 
 def release_without_terms(name, download_id: "test-id")
   {
-    "name" => name,
+    "name"                       => name,
     "requiresTermsAndConditions" => false,
-    "urls" => {
+    "urls"                       => {
       BmdCatalog::PLATFORM => [{ "downloadId" => download_id }],
     },
   }
@@ -110,7 +110,7 @@ MODAL_HTML = <<~HTML
   </div>
 HTML
 
-EXTRACTED = BmdTerms.extract(MODAL_HTML)
+EXTRACTED = BmdTerms.extract(MODAL_HTML).freeze
 
 check("extracts the agreement text") do
   EXTRACTED.include?("IMPORTANT: Read this before installing.")
@@ -121,7 +121,7 @@ check("keeps the agreement's nested elements, which hold numbered clauses") do
 end
 
 check("stops at the end of the agreement, taking no form chrome with it") do
-  !EXTRACTED.include?("Email") && !EXTRACTED.include?("Disagree")
+  EXTRACTED.exclude?("Email") && EXTRACTED.exclude?("Disagree")
 end
 
 check("keeps the agreement's line structure rather than running it together") do
@@ -148,7 +148,7 @@ puts "\nthe refusal itself"
 # is what a real refusal prints.
 TERMS_TEXT = EXTRACTED
 
-BmdTerms.define_singleton_method(:text) { |_slug, timeout: nil| TERMS_TEXT }
+BmdTerms.define_singleton_method(:text) { |_slug, **| TERMS_TEXT }
 
 def refusal_error(release)
   strategy = BmdDownloadStrategy.new(
@@ -160,7 +160,7 @@ rescue CurlDownloadStrategyError => e
   e
 end
 
-REFUSAL = refusal_error(release_with_terms("Blackmagic RAW 5.1", "bmd-braw-sdk-2"))
+REFUSAL = refusal_error(release_with_terms("Blackmagic RAW 5.1", "bmd-braw-sdk-2")).freeze
 
 check("refusing raises an error that exits non-zero") do
   REFUSAL.is_a?(CurlDownloadStrategyError) && REFUSAL.is_a?(RuntimeError)
@@ -185,8 +185,8 @@ end
 check("the refusal offers no way to accept other than the config file") do
   # An env-var escape hatch would make acceptance a throwaway flag on one command line rather than a
   # deliberate act recorded in a file the user wrote, and `accepts_terms?` does not honour one.
-  !REFUSAL.message.downcase.include?("environment variable") &&
-    !REFUSAL.message.include?(BmdConfig.env_var(BmdConfig::TERMS_FIELD))
+  REFUSAL.message.downcase.exclude?("environment variable") &&
+    REFUSAL.message.exclude?(BmdConfig.env_var(BmdConfig::TERMS_FIELD))
 end
 
 report_failures!

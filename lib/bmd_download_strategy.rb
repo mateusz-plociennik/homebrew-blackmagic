@@ -103,7 +103,7 @@ class BmdDownloadStrategy < CurlDownloadStrategy
   def refuse_terms!(release, timeout: nil)
     terms_text = BmdTerms.text(release["termsAndConditions"], timeout:)
 
-    message = +"\"#{release["name"]}\" requires accepting Blackmagic Design's licence agreement.\n\n"
+    message = "\"#{release["name"]}\" requires accepting Blackmagic Design's licence agreement.\n\n"
     message << "#{terms_text}\n\n"
     message << "(#{BmdTerms.url(release["termsAndConditions"])})\n\n"
     message << "If you agree to it, record that in #{BmdConfig.path}:\n\n"
