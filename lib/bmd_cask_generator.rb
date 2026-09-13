@@ -302,6 +302,9 @@ module BmdCaskGenerator
     # Mints a signed download URL, same request shape as `BmdDownloadStrategy` — including the
     # registration fields when the release needs them, since scaffolding a registration-path cask means
     # actually downloading its artifact. Terms-gated releases never reach here; `generate` refuses them.
+    #
+    # `retries: 0` for the same reason the strategy sets it: a registration POST that Blackmagic
+    # accepted must not be replayed just because the response never arrived.
     def mint_signed_url(download_id, product: nil, registration: false, timeout: nil)
       endpoint = format(RESOLVE_ENDPOINT, country: BmdCatalog.country, id: download_id)
       body = {
@@ -326,6 +329,7 @@ module BmdCaskGenerator
         "--header", "Referer: #{SITE}/#{BmdCatalog.country}/support/",
         "--data-raw", JSON.generate(body),
         endpoint,
+        retries:    0,
         user_agent: USER_AGENT,
         timeout:
       )
@@ -333,10 +337,21 @@ module BmdCaskGenerator
       response = result.stdout.strip
       if !result.success? || !response.start_with?("https://")
         raise GeneratorError,
-              "Blackmagic Design refused to issue a download URL: #{response.presence || "(empty)"}"
+              "Blackmagic Design refused to issue a download URL: " \
+              "#{response.presence || "(empty)"}#{registration_hint(response)}"
       end
 
       response
+    end
+
+    # Blackmagic answer a bad set of identity fields with a refusal that mentions registration, and
+    # their wording names nothing the user can act on. Point at the file the fields came from, exactly
+    # as `BmdDownloadStrategy#registration_hint` does at install time.
+    def registration_hint(response)
+      return "" unless response.match?(/regist/i)
+
+      "\nRegistration details come from #{BmdConfig.path} (or #{BmdConfig::ENV_PREFIX}* in the " \
+        "environment) — check that every field there is one Blackmagic would accept."
     end
 
     def unsigned_path(signed_url)
