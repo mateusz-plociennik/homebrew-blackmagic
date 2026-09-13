@@ -72,8 +72,11 @@ class BmdDownloadStrategy < CurlDownloadStrategy
   # The trailing `nil`s are last-modified and content-length, which Homebrew only uses for cache
   # freshness heuristics — the pinned `sha256` is the real integrity check.
   #
-  # This is also why `brew audit --cask --online` cannot pass for casks using this strategy: there is
-  # no URL for it to validate. Do not "fix" this override to restore the probe.
+  # Do not "fix" this override to restore the probe. It is load-bearing for the cache key, not for
+  # audit: `brew audit --cask --online` passes for casks using this strategy, because
+  # `Cask::Audit#audit_url_https_availability` returns early for any `url` with a `using:` strategy,
+  # so the unsigned path is never validated. Its `audit_download` step then fetches through `_fetch`,
+  # which mints a real signed URL — meaning an online audit downloads the whole artifact.
   def resolve_url_basename_time_file_size(url, timeout: nil)
     [url, parse_basename(url), nil, nil, nil, false]
   end
