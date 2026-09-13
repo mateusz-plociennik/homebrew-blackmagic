@@ -55,13 +55,14 @@ end
 puts "\nmissing"
 
 check("first run against the committed skip-list reports zero products for a real-shaped catalog") do
-  # Every base name below either already has a cask (Ethernet Switch) or a `BmdSkipList` entry.
+  # Every base name below either already has a cask (Ethernet Switch, DaVinci Resolve) or a
+  # `BmdSkipList` entry.
   real_shaped = [
     sample_release("Blackmagic Ethernet Switch 1.2"),
     sample_release("Blackmagic Camera 10.2.2 Update"),
     sample_release("DaVinci Resolve 21.0.4 Update", registration: true),
   ]
-  BmdProductReport.missing(real_shaped, Set["Blackmagic Ethernet Switch"]).empty?
+  BmdProductReport.missing(real_shaped, Set["Blackmagic Ethernet Switch", "DaVinci Resolve"]).empty?
 end
 
 check("removing one skip-list entry makes exactly that product reappear") do
@@ -85,14 +86,20 @@ end
 puts "\nstale_skip_entries"
 
 check("flags a skip entry whose reason names a now-closed issue") do
-  entries = BmdProductReport.stale_skip_entries(Set[3, 6]) # #3, #6 open; everything else closed
+  entries = BmdProductReport.stale_skip_entries(Set[6]) # #6 open; everything else closed
   flagged = BmdProductReport.stale_skip_entries(Set.new) # nothing open
   entries.none? { |e| e.start_with?("Blackmagic eGPU") } &&
-    flagged.any? { |e| e.start_with?("DaVinci Resolve:") }
+    flagged.any? { |e| e.start_with?("Blackmagic RAW:") }
 end
 
 check("does not flag a skip entry whose issue is still open") do
-  BmdProductReport.stale_skip_entries(Set[3, 6]).none? { |e| e.start_with?("DaVinci Resolve:") }
+  BmdProductReport.stale_skip_entries(Set[6]).none? { |e| e.start_with?("Blackmagic RAW:") }
+end
+
+# Entries that name no issue at all are never stale — which is why the registration-path products
+# waiting on install verification carry no number.
+check("ignores a skip entry whose reason names no issue") do
+  BmdProductReport.stale_skip_entries(Set.new).none? { |e| e.start_with?("Fairlight Live:") }
 end
 
 report_failures!

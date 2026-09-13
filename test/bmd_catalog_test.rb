@@ -128,6 +128,31 @@ check("returns the macOS downloadId") do
   BmdCatalog.mac_download_id_from(CATALOG, "Blackmagic Camera", "10.2.2") == "id-for-Blackmagic Camera 10.2.2 Update"
 end
 
+puts "\nrequest-shape flags"
+
+# Which body Blackmagic will accept comes from these two flags on the catalog entry, not from anything
+# a cask states — so what they answer for an entry that omits them matters: absent means anonymous, and
+# an entry that gains a flag upstream changes the request without a cask edit.
+check("reads requiresRegistration") do
+  BmdCatalog.requires_registration?({ "requiresRegistration" => true })
+end
+
+check("treats a missing requiresRegistration as anonymous") do
+  !BmdCatalog.requires_registration?(release("Blackmagic Camera 10.2"))
+end
+
+check("treats requiresRegistration false as anonymous") do
+  !BmdCatalog.requires_registration?({ "requiresRegistration" => false })
+end
+
+check("reads requiresTermsAndConditions") do
+  BmdCatalog.requires_terms?({ "requiresTermsAndConditions" => true })
+end
+
+check("treats a missing requiresTermsAndConditions as no terms") do
+  !BmdCatalog.requires_terms?(release("Blackmagic Camera 10.2"))
+end
+
 puts "\nMAC_RELEASES (livecheck strategy)"
 
 # What `livecheck` actually runs: the proc receives the parsed catalog and the cask's regex, and

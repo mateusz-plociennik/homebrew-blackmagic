@@ -9,7 +9,7 @@ bin/verify
 ```
 
 This is the local equivalent of `.github/workflows/ci.yml`: it runs
-`brew test-bot --only-tap-syntax` and all three repository tests with
+`brew test-bot --only-tap-syntax` and every repository test with
 Homebrew's Ruby. Plain system `ruby`, `rubocop`, and `brew style` alone are
 not substitutes for this check.
 

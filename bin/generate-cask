@@ -33,7 +33,7 @@ else
   begin
     path = BmdCaskGenerator.generate(product_name, version:)
     puts "Wrote #{path}"
-  rescue BmdCaskGenerator::GeneratorError, BmdCatalog::CatalogError => e
+  rescue BmdCaskGenerator::GeneratorError, BmdCatalog::CatalogError, BmdConfig::ConfigError => e
     warn "generate-cask: #{e.message}"
     exit 1
   end

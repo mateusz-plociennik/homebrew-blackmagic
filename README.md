@@ -63,9 +63,6 @@ makes the whole tap discoverable via `blackmagic-<TAB>`.
 
 ## Configuration
 
-> **Not yet working — requires [#3](../../issues/3).** This section is the specification the config
-> loader will be built against; nothing reads this file today.
-
 Most Blackmagic downloads need no configuration at all — roughly two thirds of their catalog is
 flagged as not requiring registration, and those resolve anonymously. **Install those with zero
 setup.**
@@ -89,9 +86,14 @@ details, and will refuse to install without them. Supply them in
 ```
 
 Every field can be overridden by an environment variable (e.g. `BMD_TAP_EMAIL`), so this works in
-CI without a config file.
+CI without a config file. The environment wins over the file; an empty variable counts as unset.
+`$XDG_CONFIG_HOME` is honoured if you set it.
 
 `country` defaults to `au`; it is the only field the anonymous path uses.
+
+If a registration-path cask is missing any field, the install stops before downloading anything and
+prints the path to write and the JSON to put in it. Nothing is ever prompted for mid-install, and no
+field is ever guessed.
 
 **Use your real details.** When a download requires registration, this tap is submitting *your*
 registration to Blackmagic — you are the party registering, the tap is just your HTTP client. It
