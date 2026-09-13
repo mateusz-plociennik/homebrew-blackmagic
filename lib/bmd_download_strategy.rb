@@ -83,10 +83,11 @@ class BmdDownloadStrategy < CurlDownloadStrategy
 
   def _fetch(url:, resolved_url:, timeout:)
     release = BmdCatalog.mac_release(@product, version.to_s, timeout:)
-    refuse_terms!(release, timeout:) if BmdCatalog.requires_terms?(release) && !BmdConfig.accepts_terms?
+    terms = BmdCatalog.requires_terms?(release)
+    refuse_terms!(release, timeout:) if terms && !BmdConfig.accepts_terms?
     registration = BmdCatalog.requires_registration?(release)
 
-    signed_url = mint_signed_url(BmdCatalog.download_id_for(release), registration:, timeout:)
+    signed_url = mint_signed_url(BmdCatalog.download_id_for(release), registration:, terms:, timeout:)
     ohai "Minted a signed URL from #{SITE}" unless quiet?
     _curl_download signed_url, temporary_path, timeout
   end
@@ -118,9 +119,9 @@ class BmdDownloadStrategy < CurlDownloadStrategy
   #
   # `retries: 0` is deliberate: this POST registers a download, so it must not be replayed
   # automatically. `user_agent:` overrides Homebrew's default for the reason given at `USER_AGENT`.
-  def mint_signed_url(download_id, registration:, timeout: nil)
+  def mint_signed_url(download_id, registration:, terms: false, timeout: nil)
     endpoint = format(RESOLVE_ENDPOINT, country:, id: download_id)
-    body = request_body(registration:)
+    body = request_body(registration:, terms:)
 
     result = curl_output(
       "--request", "POST",
@@ -180,15 +181,20 @@ class BmdDownloadStrategy < CurlDownloadStrategy
   # signed URL for the same body with one. So `product` is what marks a request as a registration
   # rather than an anonymous download, and it must be non-empty.
   #
-  # Nothing here asserts agreement to anything: `_fetch` refuses `requiresTermsAndConditions`
-  # releases outright, and the endpoint wants no terms flag for the rest.
-  def request_body(registration:)
+  # `hasAgreedToTerms` is sent only for a `requiresTermsAndConditions` release, and only once `_fetch`
+  # has established that the config file carries the opt-in — so the assertion Blackmagic receive is
+  # one the user actually made, in writing, in a file they edited. Their own modal sends the same
+  # field from the same checkbox (`supportFormDetails` in `support-bundle.js` seeds
+  # `formData.hasAgreedToTerms = false` whenever the release has terms). Ungated releases send nothing
+  # of the kind; the endpoint does not want it.
+  def request_body(registration:, terms: false)
     body = {
       "platform" => BmdCatalog::PLATFORM,
       "policy"   => true,
       "country"  => country,
       "origin"   => "www.blackmagicdesign.com",
     }
+    body["hasAgreedToTerms"] = true if terms
     return body.merge("downloadOnly" => true) unless registration
 
     body.merge("product" => @product, **BmdConfig.registration_details)

@@ -96,8 +96,11 @@ the chosen related product (or the release name) and never sets `downloadOnly`. 
 against a registration-gated release, a body carrying every identity field but no `product` is still
 `403 Must register to be able to perform the download`, and the same body with a non-empty `product`
 returns a signed URL. An empty-string `product` is a 403 too. `downloadOnly` makes no difference
-either way, and no terms flag is wanted — `hasAgreedToTerms` was in the earlier table but is not
-required for a `requiresTermsAndConditions: false` release, so the tap sends nothing of the kind.
+either way. `hasAgreedToTerms` was in the earlier table but is not required for a
+`requiresTermsAndConditions: false` release, so the tap sends it only on a *gated* one, and only once
+the config file carries `"agreeToTerms": true` — which is the same field Blackmagic's own modal sends
+from its checkbox (`supportFormDetails` seeds `formData.hasAgreedToTerms = false` whenever the release
+has terms, and `onFormSubmission` refuses to submit until it is true).
 The value passed is the cask's own product name (`"DaVinci Resolve"`), which the endpoint accepts.
 
 An anonymous body against a registration-required item → `403 Must register to be able to perform the
@@ -269,6 +272,11 @@ Still open: `conflicts_with` between free Resolve and Studio, once a Studio cask
   renders as step 2 of the download form; every `/api/…/terms…` shape 404s. `BmdTerms` fetches that
   fragment and lifts the agreement out of its `<div class="tandc">`. If it cannot, it raises — the
   install still stops, and the tap never asks anyone to agree to a document it could not show them.
+
+  Acceptance is also *sent*, not just checked locally: a gated release's resolve POST carries
+  `hasAgreedToTerms: true`, the field their own checkbox sets, so the assertion Blackmagic receive is
+  the one the user wrote in their config file. `bin/generate-cask` gates on the same key, since
+  scaffolding downloads the artifact.
 
   No cask in the tap exercises this yet, because the two eligible products (`Blackmagic RAW`,
   `Blackmagic Fairlight Sound Library`) are also registration-gated, and bootstrapping either means

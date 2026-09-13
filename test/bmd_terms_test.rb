@@ -25,9 +25,12 @@ def with_terms_config(terms_accepted)
     Dir.mkdir(path)
     File.write(File.join(path, "config.json"), JSON.generate(config_data))
 
+    # `XDG_CONFIG_HOME` is restored along with the field overrides: the tmpdir is gone after the block,
+    # and leaving it pointing there would have every later check read a config path that cannot exist.
     cleared = BmdConfig::FIELDS.to_h { |name| [BmdConfig.env_var(name), nil] }
-    previous = cleared.keys.to_h { |key| [key, ENV.fetch(key, nil)] }
-    cleared.merge("XDG_CONFIG_HOME" => dir).each { |key, value| ENV[key] = value }
+    overrides = cleared.merge("XDG_CONFIG_HOME" => dir)
+    previous = overrides.keys.to_h { |key| [key, ENV.fetch(key, nil)] }
+    overrides.each { |key, value| ENV[key] = value }
 
     yield
   ensure
@@ -133,6 +136,13 @@ check_raises("refuses to invent text when the container is gone", BmdTerms::Term
   BmdTerms.extract("<div class=\"modal\">Blackmagic redesigned the page</div>", "bmd-standard-sdk")
 end
 
+# An empty container read as "an agreement with no words in it" would have the refusal print nothing
+# and still demand agreement to it, which is the one thing this path must not do.
+check_raises("treats an empty container as unread, not as an empty agreement", BmdTerms::TermsError,
+             "no longer contains") do
+  BmdTerms.extract("<div class=\"tandc\">\n  <p>&nbsp;</p>\n</div>", "bmd-standard-sdk")
+end
+
 check("names the slug's own URL, which is where a person would read it") do
   BmdTerms.url("bmd-braw-sdk-2").end_with?("download-with-terms-start/bmd-braw-sdk-2")
 end
@@ -187,6 +197,73 @@ check("the refusal offers no way to accept other than the config file") do
   # deliberate act recorded in a file the user wrote, and `accepts_terms?` does not honour one.
   REFUSAL.message.downcase.exclude?("environment variable") &&
     REFUSAL.message.exclude?(BmdConfig.env_var(BmdConfig::TERMS_FIELD))
+end
+
+puts "\nthe guard in _fetch"
+
+# `refuse_terms!` above is the message; this is the decision to call it. Both directions are checked
+# because either failure is silent in the other's tests: a broken guard downloads a gated release
+# without consent, and an over-eager one refuses a release the user already agreed to.
+#
+# `mac_release` and `_curl_download` are stubbed — the first curls the catalog, the second the
+# artifact — and `mint_signed_url` is replaced by a recorder, so what reaches Blackmagic is inspected
+# rather than sent.
+def fetch_attempt(release, terms_accepted)
+  recorded = {}
+  strategy = BmdDownloadStrategy.new(
+    "https://example.invalid/Test_1.0.zip", "test", "1.0", data: { "product" => "Test" }
+  )
+  strategy.define_singleton_method(:mint_signed_url) do |id, registration:, terms: false, **|
+    recorded.merge!(id:, registration:, terms:)
+    "https://sw.blackmagicdesign.com/signed"
+  end
+  strategy.define_singleton_method(:_curl_download) { |*| recorded[:downloaded] = true }
+  strategy.define_singleton_method(:quiet?) { true }
+  BmdCatalog.define_singleton_method(:mac_release) { |_product, _version, **| release }
+
+  with_terms_config(terms_accepted) do
+    strategy.send(:_fetch, url: "https://example.invalid/Test_1.0.zip", resolved_url: nil, timeout: nil)
+  end
+  recorded
+rescue CurlDownloadStrategyError => e
+  recorded.merge(refused: e)
+end
+
+GATED = release_with_terms("Blackmagic RAW 5.1", "bmd-braw-sdk-2").freeze
+
+check("refuses a gated release when the config carries no opt-in") do
+  attempt = fetch_attempt(GATED, nil)
+  attempt[:refused].is_a?(CurlDownloadStrategyError) && attempt[:downloaded].nil? && attempt[:id].nil?
+end
+
+check("downloads a gated release once the config carries the opt-in") do
+  attempt = fetch_attempt(GATED, true)
+  attempt[:refused].nil? && attempt[:downloaded] && attempt[:terms]
+end
+
+check("does not refuse an ungated release, and claims no agreement for it") do
+  attempt = fetch_attempt(release_without_terms("Test 1.0"), nil)
+  attempt[:refused].nil? && attempt[:downloaded] && attempt[:terms] == false
+end
+
+puts "\nwhat the resolve request asserts"
+
+# Blackmagic's own modal sends `hasAgreedToTerms` from the checkbox on a gated release; the tap sends
+# it from the config file, and only there. Asserting it for a release with no terms would be claiming
+# agreement to a document that does not exist.
+def body_for(terms:, registration: false)
+  strategy = BmdDownloadStrategy.new(
+    "https://example.invalid/Test_1.0.zip", "test", "1.0", data: { "product" => "Test" }
+  )
+  strategy.send(:request_body, registration:, terms:)
+end
+
+check("asserts agreement to Blackmagic for a gated release") do
+  body_for(terms: true)["hasAgreedToTerms"] == true
+end
+
+check("asserts nothing about terms for an ungated release") do
+  body_for(terms: false).exclude?("hasAgreedToTerms")
 end
 
 report_failures!

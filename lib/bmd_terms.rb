@@ -42,7 +42,12 @@ module BmdTerms
       container = balanced_container(html)
       raise TermsError, missing_message(slug) if container.nil?
 
-      to_text(container)
+      # An empty div is the same failure as a missing one, and worse if allowed through: the refusal
+      # would print nothing and still ask for agreement to it. Blank means unread, not "no terms".
+      text = to_text(container).presence
+      raise TermsError, missing_message(slug) if text.nil?
+
+      text
     end
 
     private
@@ -80,6 +85,9 @@ module BmdTerms
       html
         .gsub(%r{<br\s*/?>|</p>|</h\d>|</li>}i, "\n")
         .gsub(/<[^>]*>/, "")
+        # `CGI.unescapeHTML` knows only the five XML entities, and `&nbsp;` is common in this prose —
+        # left alone it prints literally, and a container holding nothing else would read as non-blank.
+        .gsub(/&nbsp;/i, " ")
         .then { |text| CGI.unescapeHTML(text) }
         .gsub(/[ \t]+/, " ")
         .gsub(/ ?\n ?/, "\n")
@@ -90,7 +98,7 @@ module BmdTerms
     def missing_message(slug)
       <<~MESSAGE
         Blackmagic's licence agreement at #{url(slug)} no longer contains a
-        `#{CONTAINER}` element, so the agreement text could not be read from it.
+        `#{CONTAINER}` element with text in it, so the agreement could not be read from it.
 
         Nothing has been downloaded. Read the agreement in a browser at the URL above; the tap needs
         `lib/bmd_terms.rb` updated before it can show it to you itself.
