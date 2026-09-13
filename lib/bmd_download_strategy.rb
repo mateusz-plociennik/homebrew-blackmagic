@@ -154,25 +154,31 @@ class BmdDownloadStrategy < CurlDownloadStrategy
     HINT
   end
 
-  # Fields Blackmagic require even for downloads that need no registration. `downloadOnly` is what
-  # their own "Download only" button sets, and `country` is mandatory — omitting it is a 400.
+  # The two bodies Blackmagic's own download modal posts, which are the two this sends.
   #
-  # `requiresRegistration` releases take the same body plus the user's identity fields, which is
-  # exactly what their web form posts. `hasAgreedToTerms` is part of that set and the endpoint wants
-  # it present; it is only ever sent for releases whose `requiresTermsAndConditions` is false, i.e.
-  # where Blackmagic publish no terms to agree to — `_fetch` refuses the others outright rather than
-  # answering this question on the user's behalf.
+  # Common to both: `platform`, `policy`, `origin`, and `country` — mandatory even though the country
+  # also appears in the path; omitting it is a 400.
+  #
+  # What actually discriminates them is `product`, not the identity fields and not `downloadOnly`:
+  # their "Download only" button sets `downloadOnly` and sends no `product`, while their registration
+  # form sends the product and no `downloadOnly` (`SupportModalDownloadStartCtrl` in
+  # `support-bundle.js`). The endpoint reads it the same way — a registration-gated release answers
+  # `403 Must register …` to a body with a full set of identity fields but no `product`, and issues a
+  # signed URL for the same body with one. So `product` is what marks a request as a registration
+  # rather than an anonymous download, and it must be non-empty.
+  #
+  # Nothing here asserts agreement to anything: `_fetch` refuses `requiresTermsAndConditions`
+  # releases outright, and the endpoint wants no terms flag for the rest.
   def request_body(registration:)
     body = {
-      "platform"     => BmdCatalog::PLATFORM,
-      "policy"       => true,
-      "downloadOnly" => true,
-      "country"      => country,
-      "origin"       => "www.blackmagicdesign.com",
+      "platform" => BmdCatalog::PLATFORM,
+      "policy"   => true,
+      "country"  => country,
+      "origin"   => "www.blackmagicdesign.com",
     }
-    return body unless registration
+    return body.merge("downloadOnly" => true) unless registration
 
-    body.merge(BmdConfig.registration_details, "hasAgreedToTerms" => true)
+    body.merge("product" => @product, **BmdConfig.registration_details)
   end
 
   def country

@@ -84,10 +84,24 @@ https://github.com/orgs/Homebrew/discussions/574).
 | `requiresRegistration` | Required fields |
 |---|---|
 | `false` (the "Download only" button on the site) | `platform`, `policy: true`, `country`, `downloadOnly: true`, `origin` |
-| `true` | above + `firstname`, `lastname`, `email`, `phone`, `company`, `street`, `city`, `state`, `hasAgreedToTerms` |
+| `true` (their registration form) | `platform`, `policy: true`, `country`, `origin`, **`product`**, `firstname`, `lastname`, `email`, `phone`, `company`, `street`, `city`, `state` |
 
-Both verified working. `product` is **optional** (tested). `country` is **required** (omitting → 400).
-Anonymous body against a registration-required item → `403 Must register to be able to perform the download`.
+Both verified working. `country` is **required** (omitting → 400).
+
+**`product` is what discriminates the two bodies** — corrected in #3; the earlier note here called it
+optional, which held only for the anonymous path. Their modal is explicit about it
+(`SupportModalDownloadStartCtrl`): `downloadNow()` — the "Download only" button — sets
+`downloadOnly = true` and sends no `product`, while `handleFormSubmission()` fills `product` in from
+the chosen related product (or the release name) and never sets `downloadOnly`. The endpoint agrees:
+against a registration-gated release, a body carrying every identity field but no `product` is still
+`403 Must register to be able to perform the download`, and the same body with a non-empty `product`
+returns a signed URL. An empty-string `product` is a 403 too. `downloadOnly` makes no difference
+either way, and no terms flag is wanted — `hasAgreedToTerms` was in the earlier table but is not
+required for a `requiresTermsAndConditions: false` release, so the tap sends nothing of the kind.
+The value passed is the cask's own product name (`"DaVinci Resolve"`), which the endpoint accepts.
+
+An anonymous body against a registration-required item → `403 Must register to be able to perform the
+download`.
 
 ~~**Throttle:** back-to-back POSTs return a bare `400 Bad Request`; ~30s spacing always worked.~~
 **There is no throttle** (established in #2). The bare `400` is a User-Agent filter: this endpoint
@@ -205,12 +219,36 @@ A copy of the zip may still be at `/tmp/es.zip` (369 MB) — check before re-dow
 6. **User approved a full real install** (`brew install --cask`, sudo prompt, 807 MB pkg) followed by
    `brew uninstall --cask` to prove the `uninstall pkgutil:` stanza.
 
-### Then: DaVinci Resolve (exercises the registration path)
+### DaVinci Resolve (exercises the registration path) — **done in #3**
 
 Free Resolve is `requiresRegistration: true`; Resolve **Studio** is `false` (inverted from what you'd
-expect). Latest at time of research: 21.0.4, Mac downloadIds `b8e8e421548d4475a36a91155f81f3f2`
-(free) / `3598b54de60948399b034409ab19fa9a` (Studio). Consider `conflicts_with` between the two.
-Multi-GB downloads — slow to iterate on.
+expect). Neither is `requiresTermsAndConditions`. Multi-GB downloads (21.1 is 3.8 GB zipped, a 5.8 GB
+pkg) — slow to iterate on.
+
+`Casks/blackmagic-davinci-resolve.rb` was scaffolded by `bin/generate-cask` and install-verified at
+21.1: install, uninstall, reinstall, on a machine that also had Fairlight Live. Two things that pass
+came out of it, both about *shared* payload:
+
+- **`com.blackmagic-design.Manifest*` is not Resolve-exclusive.** The pkg writes four `Manifest*`
+  receipts, but only `ManifestLite` is Resolve's own (Resolve.app, Proxy Generator Lite, Remote
+  Monitor); `ManifestPanels`, `ManifestBlackmagicRawPlayer` and `ManifestFairlightAudioAccelerator`
+  arrive with other Blackmagic installers too, and Fairlight Live adds `ManifestFairlightLive`,
+  `ManifestPanelsFairlightLive` and `ManifestProxyGenerator`. `pkgutil` uninstalls are not
+  reference-counted, so the prefix regex `bin/generate-cask` derives would have deleted a co-installed
+  product's files. The cask uninstalls `ManifestLite` only.
+- **`/Applications/DaVinci Resolve` is a shared directory** — Fairlight Live keeps
+  `Fairlight Studio Utility.app` and its panel setup app there — so no blanket `delete:`. But
+  `/Applications/Blackmagic Proxy Generator Lite.app` *is* deleted outright: two receipts claim that
+  bundle, `pkgutil` removed only the files `ManifestLite` lists (Info.plist and the binary among them)
+  and left ~200 stale files, i.e. an app that no longer launches. Reinstalling either product restores
+  it whole.
+
+Also worth knowing: Resolve's artifact path carries a build suffix the version does not imply
+(`/DaVinciResolve/v21.1-1/`), and its installer writes its OS check with the literal first
+(`compareVersions('15.0', system.version.ProductVersion)`), which is why
+`BmdCaskGenerator::MIN_OS_PATTERNS` has to match both argument orders.
+
+Still open: `conflicts_with` between free Resolve and Studio, once a Studio cask exists.
 
 ### Deferred (phase 3, explicitly out of scope)
 

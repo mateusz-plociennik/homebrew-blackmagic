@@ -94,7 +94,7 @@ module BmdConfig
     def skeleton
       body = FIELDS.map do |name|
         value = (name == COUNTRY_FIELD) ? DEFAULT_COUNTRY : "…"
-        %(  #{name.inspect}: #{value.inspect})
+        "  #{name.inspect}: #{value.inspect}"
       end
       "{\n#{body.join(",\n")}\n}"
     end
