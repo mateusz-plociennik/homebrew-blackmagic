@@ -37,7 +37,7 @@ jobs:
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
-        uses: Homebrew/actions/setup-homebrew@master
+        uses: Homebrew/actions/setup-homebrew@main
         with:
           # This tap is private, so both the checkout and the API calls need a token. `BUMP_TOKEN` is
           # optional: set it to a PAT if you want the bump PRs to trigger the CI workflow, which

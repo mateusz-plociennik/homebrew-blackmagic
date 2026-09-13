@@ -19,7 +19,7 @@ jobs:
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
-        uses: Homebrew/actions/setup-homebrew@master
+        uses: Homebrew/actions/setup-homebrew@main
         with:
           # This tap is private, so the action needs a token to check it out.
           token: ${{ secrets.GITHUB_TOKEN }}
