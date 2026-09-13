@@ -46,6 +46,9 @@ jobs:
         # load `utils/curl`, which `BmdCatalog` requires. The tests themselves make no network calls.
         run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/bmd_catalog_test.rb"
 
+      - name: Run the registration config tests
+        run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/bmd_config_test.rb"
+
       - name: Run the cask generator tests
         run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/bmd_cask_generator_test.rb"
 
