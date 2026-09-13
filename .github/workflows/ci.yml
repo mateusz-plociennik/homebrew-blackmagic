@@ -49,6 +49,9 @@ jobs:
       - name: Run the registration config tests
         run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/bmd_config_test.rb"
 
+      - name: Run the terms-and-conditions tests
+        run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/bmd_terms_test.rb"
+
       - name: Run the cask generator tests
         run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/bmd_cask_generator_test.rb"
 

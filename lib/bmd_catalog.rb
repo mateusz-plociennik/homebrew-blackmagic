@@ -124,8 +124,8 @@ module BmdCatalog
       release["requiresRegistration"].present?
     end
 
-    # Whether the release additionally requires accepting a licence agreement. Deliberately unhandled
-    # — see #6 — so callers refuse rather than agree on the user's behalf.
+    # Whether the release additionally requires accepting a licence agreement. `_fetch` refuses these
+    # unless the config file carries an explicit opt-in (#6) — never agreeing on the user's behalf.
     def requires_terms?(release)
       release["requiresTermsAndConditions"].present?
     end

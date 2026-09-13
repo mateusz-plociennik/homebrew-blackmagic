@@ -21,10 +21,13 @@ module BmdSkipList
   # Keyed on the catalog product name `BmdProductReport` groups releases under. Each value names the
   # reason, and an issue number where one exists, so a closed issue shows up as stale (see #11).
   SKIP_PRODUCTS = {
-    # Terms-and-conditions gated: the tap has no way to show a licence before accepting it on
-    # someone's behalf (#6), so it refuses these outright rather than agreeing for them.
-    "Blackmagic RAW"                     => "registration + T&C — blocked on #6",
-    "Blackmagic Fairlight Sound Library" => "registration + T&C — blocked on #6",
+    # Terms-and-conditions gated, and no longer blocked: since #6 the tap shows the agreement and
+    # refuses until the user records `"agreeToTerms": true` themselves. Both still need registration
+    # details and an install-verify pass, and both need their licence read by the person installing
+    # them — which is why neither can be bootstrapped on someone else's behalf. Reasons name no issue
+    # on purpose: an entry naming a closed issue reports itself as stale (see #11).
+    "Blackmagic RAW"                     => "T&C path works; needs opt-in + install-verify",
+    "Blackmagic Fairlight Sound Library" => "T&C path works; needs opt-in + install-verify",
 
     # Registration-gated but no longer blocked: the config loader landed with
     # `blackmagic-davinci-resolve`, which is the cask that proved that path. These three are eligible
