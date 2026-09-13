@@ -60,6 +60,28 @@ jobs:
         # failure would not name trust as the cause.
         run: brew trust --tap ${{ steps.set-up-homebrew.outputs.tap-name }}
 
+      - name: Drop orphaned bump branches
+        # A run that pushes `bump-<cask>-<version>` and then fails before its PR exists leaves the
+        # branch behind, and the next run's push of a fresh commit for the same version is rejected
+        # non-fast-forward — so one bad run wedges that cask's bump forever. `brew bump` skips a cask
+        # whose PR is already open, so any `bump-*` branch with no open PR is spent: delete it.
+        if: inputs.report-only != true
+        env:
+          GH_TOKEN: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          open_prs=$(gh pr list --repo "$REPO" --state open --json headRefName --jq '.[].headRefName')
+          branches=$(gh api --paginate "repos/$REPO/git/matching-refs/heads/bump-" --jq '.[].ref' |
+                       sed 's|^refs/heads/||')
+          for branch in $branches; do
+            if grep -qxF "$branch" <<<"$open_prs"; then
+              echo "Keeping $branch: its pull request is open"
+            else
+              echo "Deleting orphaned $branch"
+              gh api -X DELETE "repos/$REPO/git/refs/heads/$branch"
+            fi
+          done
+
       - name: Run brew bump
         env:
           HOMEBREW_GIT_NAME: github-actions[bot]
