@@ -276,6 +276,24 @@ Still open: `conflicts_with` between free Resolve and Studio, once a Studio cask
   `BmdCatalog.mac_release("Blackmagic RAW", "5.1")` → flag set, slug `bmd-braw-sdk-2`, refusal
   carrying all 22.6 KB of the real agreement.
 
+### `brew audit --cask --online` (#7 — the constraint that turned out not to exist)
+
+The comment that used to sit on `resolve_url_basename_time_file_size` claimed an online audit can
+never pass here. It can, and does — verified by running it against `blackmagic-ethernet-switch`:
+
+- `Cask::Audit#audit_url_https_availability` returns early for any `url` with a `using:` strategy, so
+  the deliberately-404ing unsigned path is never probed.
+- `audit_download` then fetches through `BmdDownloadStrategy#_fetch`, which mints a real signed URL.
+
+The override is still load-bearing — for the download cache key, not for audit. Do not remove it.
+
+The catch is `audit_download`: online audit downloads the whole artifact (~350 MB for Ethernet
+Switch, multiple GB for Resolve), and registration-path casks need a config file CI does not have.
+That is why per-PR CI stays on `--only-tap-syntax` and the online audit is a manual/weekly job over
+the anonymous casks only. Still unproven by anything cheap: that Blackmagic's resolve endpoint is
+alive. `bump.yml` exercises it daily as a side effect of checksumming; a dedicated health check that
+resolves a signed URL without downloading it was considered and deferred as duplicate coverage.
+
 ## Notes for the next agent
 
 - The user is a Blackmagic Design employee; their motivation is skipping the website for official

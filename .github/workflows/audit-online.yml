@@ -1,0 +1,100 @@
+name: Audit casks online
+
+# `brew audit --cask --online` does pass for this tap's casks, contrary to what the comment on
+# `resolve_url_basename_time_file_size` used to claim (#7): `Cask::Audit#audit_url_https_availability`
+# returns early for any `url` with a `using:` strategy, so the deliberately-404ing unsigned path is
+# never probed, and `audit_download` fetches through `BmdDownloadStrategy#_fetch`, which mints a real
+# signed URL.
+#
+# It is just expensive. `audit_download` downloads the whole artifact — ~350 MB for Ethernet Switch,
+# multiple GB for Resolve — which is why this is not part of the per-PR `ci.yml` (that stays on
+# `--only-tap-syntax`, which is style plus an offline audit) and runs weekly instead.
+#
+# What this adds over the offline audit: proof that Blackmagic's resolve endpoint still answers, that
+# the artifact behind each pinned version is still reachable, and that its bytes still match the
+# pinned `sha256`. `bump.yml` proves the same thing for versions that changed; this covers the ones
+# that did not.
+
+on:
+  schedule:
+    # Weekly. Daily would re-download several GB to re-learn the same answer.
+    - cron: "43 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      casks:
+        description: "Space-separated cask tokens to audit; empty audits every cask but the skipped ones"
+        type: string
+        default: ""
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # Registration-path casks cannot be audited here: resolving their download means POSTing a real
+  # person's identity to Blackmagic, and CI has no config file to read one from — deliberately, since
+  # the alternative is holding someone's home address in Actions secrets. Their download path is
+  # covered by `test/bmd_config_test.rb` and by installing locally.
+  SKIP_CASKS: blackmagic-davinci-resolve
+
+jobs:
+  audit:
+    runs-on: macos-latest
+    steps:
+      - name: Set up Homebrew
+        id: set-up-homebrew
+        uses: Homebrew/actions/setup-homebrew@main
+        with:
+          # This tap is private, so the action needs a token to check it out.
+          token: ${{ secrets.GITHUB_TOKEN }}
+          cask: true
+
+      - name: Cache Homebrew Bundler RubyGems
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.set-up-homebrew.outputs.gems-path }}
+          key: macos-latest-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
+          restore-keys: macos-latest-rubygems-
+
+      - name: Trust the tap
+        # An online audit fetches, and fetching runs this tap's custom download strategy, which
+        # Homebrew refuses to do for an untrusted tap. Without this the audit fails on trust, and the
+        # failure would not say so.
+        run: brew trust --tap ${{ steps.set-up-homebrew.outputs.tap-name }}
+
+      - name: Audit
+        env:
+          TAP: ${{ steps.set-up-homebrew.outputs.tap-name }}
+          REQUESTED: ${{ inputs.casks }}
+        run: |
+          set -eu
+          # Derived from the checked-out casks rather than listed here, so a cask added later is
+          # audited by default instead of being silently skipped.
+          casks="$REQUESTED"
+          if [ -z "$casks" ]; then
+            for path in "$(brew --repo "$TAP")"/Casks/*.rb; do
+              token=$(basename "$path" .rb)
+              printf '%s\n' $SKIP_CASKS | grep -qxF "$token" && continue
+              casks="$casks $token"
+            done
+          fi
+
+          echo "Auditing:$casks"
+          echo "Skipping: $SKIP_CASKS"
+
+          # One cask per invocation so the log says which one failed, and so a failure does not hide
+          # the rest. `|| failed=...` collects them all before exiting non-zero.
+          failed=""
+          for cask in $casks; do
+            echo "::group::brew audit --cask --online $cask"
+            brew audit --cask --online "$TAP/$cask" || failed="$failed $cask"
+            echo "::endgroup::"
+          done
+
+          if [ -n "$failed" ]; then
+            echo "Failed:$failed"
+            exit 1
+          fi
