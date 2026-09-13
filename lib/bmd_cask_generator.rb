@@ -8,6 +8,7 @@ require "json"
 require "utils/curl"
 
 require_relative "bmd_catalog"
+require_relative "bmd_terms"
 
 # Scaffolds a cask from Blackmagic's catalog, readme and artifact. See #10.
 #
@@ -200,10 +201,24 @@ module BmdCaskGenerator
         latest_mac_release(releases, product_name)
       end
 
-      if BmdCatalog.requires_terms?(release)
+      # Same gate as `BmdDownloadStrategy#_fetch`, and for the same reason: scaffolding downloads the
+      # artifact, so it needs the licence accepted first, and only the person running this can accept
+      # it. The refusal shows the agreement rather than naming it — `BmdTerms.text` raises if it
+      # cannot read it, which stops the scaffold either way.
+      terms = BmdCatalog.requires_terms?(release)
+      if terms && !BmdConfig.accepts_terms?
         raise GeneratorError, <<~MESSAGE
-          "#{release["name"]}" requires accepting Blackmagic's licence terms, which this tap does not do
-          on anyone's behalf (blocked on #6).
+          "#{release["name"]}" requires accepting Blackmagic Design's licence agreement.
+
+          #{BmdTerms.text(release["termsAndConditions"], timeout:)}
+
+          (#{BmdTerms.url(release["termsAndConditions"])})
+
+          If you agree to it, record that in #{BmdConfig.path}:
+
+          { "agreeToTerms": true }
+
+          Nothing has been downloaded.
         MESSAGE
       end
 
@@ -235,7 +250,8 @@ module BmdCaskGenerator
       raise GeneratorError, "homepage #{homepage} did not answer HTTP 200" unless homepage_ok?(homepage, timeout:)
 
       signed_url = mint_signed_url(download_id, product: product_name,
-                                   registration: BmdCatalog.requires_registration?(release), timeout:)
+                                   registration: BmdCatalog.requires_registration?(release),
+                                   terms:, timeout:)
 
       Dir.mktmpdir("bmd-generate-cask") do |dir|
         zip_path = File.join(dir, "artifact.zip")
@@ -301,11 +317,12 @@ module BmdCaskGenerator
 
     # Mints a signed download URL, same request shape as `BmdDownloadStrategy` — including the
     # registration fields when the release needs them, since scaffolding a registration-path cask means
-    # actually downloading its artifact. Terms-gated releases never reach here; `generate` refuses them.
+    # actually downloading its artifact, and `hasAgreedToTerms` for a gated release — which `generate`
+    # only reaches once the config file carries the opt-in.
     #
     # `retries: 0` for the same reason the strategy sets it: a registration POST that Blackmagic
     # accepted must not be replayed just because the response never arrived.
-    def mint_signed_url(download_id, product: nil, registration: false, timeout: nil)
+    def mint_signed_url(download_id, product: nil, registration: false, terms: false, timeout: nil)
       endpoint = format(RESOLVE_ENDPOINT, country: BmdCatalog.country, id: download_id)
       body = {
         "platform" => BmdCatalog::PLATFORM,
@@ -313,6 +330,7 @@ module BmdCaskGenerator
         "country"  => BmdCatalog.country,
         "origin"   => "www.blackmagicdesign.com",
       }
+      body["hasAgreedToTerms"] = true if terms
       body = if registration
         # `product` is what marks the request as a registration rather than an anonymous download; see
         # `BmdDownloadStrategy#request_body`.
