@@ -64,17 +64,28 @@ check("returns nil for a blank family") { BmdCaskGenerator.homepage_for_family(n
 
 puts "\nmacos_symbol_for"
 
-check("rounds a version below the oldest expressible symbol up to :big_sur") do
-  BmdCaskGenerator.macos_symbol_for("10.14") == :big_sur
+check("returns nil for a version below the oldest Homebrew supports") do
+  BmdCaskGenerator.macos_symbol_for("10.14").nil?
 end
 
-check("matches an exact symbol version") { BmdCaskGenerator.macos_symbol_for("11") == :big_sur }
+check("returns nil for the oldest release Homebrew supports, which needs no stanza") do
+  BmdCaskGenerator.macos_symbol_for(BmdCaskGenerator::MACOS_SYMBOLS.keys.first).nil?
+end
+
+check("matches an exact symbol version") { BmdCaskGenerator.macos_symbol_for("14") == :sonoma }
 
 check("rounds a version between two symbols up to the higher one") do
   BmdCaskGenerator.macos_symbol_for("14.5") == :sequoia
 end
 
 check("returns nil when the pkg enforces nothing") { BmdCaskGenerator.macos_symbol_for(nil).nil? }
+
+check("raises for a version newer than any release Homebrew knows") do
+  BmdCaskGenerator.macos_symbol_for("99")
+  false
+rescue BmdCaskGenerator::GeneratorError
+  true
+end
 
 puts "\nparse_distribution"
 

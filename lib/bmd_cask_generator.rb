@@ -5,6 +5,7 @@ require "digest"
 require "fileutils"
 require "tmpdir"
 require "json"
+require "macos_version"
 require "utils/curl"
 
 require_relative "bmd_catalog"
@@ -40,18 +41,10 @@ module BmdCaskGenerator
     },
   }.freeze
 
-  # The oldest macOS a pkg's own installer check can name, mapped to the oldest symbol Homebrew can
-  # still express for it. Homebrew no longer supports Catalina, so anything below macOS 11 gets
-  # `:big_sur`.
-  MACOS_SYMBOLS = {
-    "11" => :big_sur,
-    "12" => :monterey,
-    "13" => :ventura,
-    "14" => :sonoma,
-    "15" => :sequoia,
-    "26" => :tahoe,
-    "27" => :golden_gate,
-  }.freeze
+  # Every macOS release a cask can name, oldest first. Read from Homebrew rather than written out so
+  # the floor moves when Homebrew drops a release: `Homebrew/OSDependsOn` fails a cask that names one
+  # at or below the oldest supported, which is how a hand-written copy would go stale.
+  MACOS_SYMBOLS = MacOSVersion::SYMBOLS.invert.sort_by { |version, _| version.split(".").map(&:to_i) }.to_h.freeze
 
   # The version in a pkg's own `pm_install_check()` OS test, whichever way round the comparison is
   # written. Both orders are in the wild — Ethernet Switch has
@@ -102,14 +95,19 @@ module BmdCaskGenerator
 
     # The Homebrew `depends_on macos:` symbol for the version string a pkg's own installer check
     # names (e.g. `"10.14"`), rounded *up* to the nearest symbol Homebrew can express.
+    #
+    # `nil` when the pkg names nothing, and also when it names the oldest release Homebrew still
+    # supports or older: every mac Homebrew will install on already clears that floor, so naming it is
+    # redundant and `Homebrew/OSDependsOn` fails the cask for it. Both render as a bare
+    # `depends_on :macos`.
     def macos_symbol_for(min_version)
       return if min_version.blank?
 
       wanted = min_version.split(".").map(&:to_i)
-      symbol = MACOS_SYMBOLS
-               .sort_by { |version, _| version.split(".").map(&:to_i) }
-               .find { |version, _| (version.split(".").map(&:to_i) <=> wanted) >= 0 }
-      symbol&.last
+      version, symbol = MACOS_SYMBOLS.find { |candidate, _| (candidate.split(".").map(&:to_i) <=> wanted) >= 0 }
+      raise GeneratorError, "no macOS release Homebrew knows of covers #{min_version}" if symbol.nil?
+
+      symbol if version != MACOS_SYMBOLS.keys.first
     end
 
     # The regex a cask's `uninstall pkgutil:` stanza passes to `pkgutil --pkgs=`: the longest common
@@ -178,7 +176,9 @@ module BmdCaskGenerator
             regex BmdCatalog.release_regex(#{product.dump})
             strategy :json, &BmdCatalog::MAC_RELEASES
           end
-        #{"\n  depends_on macos: :#{macos_symbol}\n" if macos_symbol}
+
+          depends_on #{macos_symbol ? "macos: :#{macos_symbol}" : ":macos"}
+
           pkg #{pkg_filename.dump.gsub('\#{version}', '#{version}')}
 
           uninstall pkgutil: #{pkgutil_regex.dump}
