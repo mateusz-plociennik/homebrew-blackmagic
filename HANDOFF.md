@@ -210,7 +210,7 @@ Chosen because it takes the anonymous path (no PII) and the artifact is already 
 - structure: `.zip` → `Blackmagic_Ethernet_Switch_1.2.dmg` → `Install Ethernet Switch 1.2.pkg` (807 MB).
   Homebrew's `extract_nestedly` unwraps zip→dmg automatically, so a `pkg` stanza works directly.
 - pkg receipts: `com.blackmagic-design.EthernetSwitch`, `…EthernetSwitchAssets`, `…EthernetSwitchUninstaller`
-  → `uninstall pkgutil: "com.blackmagic-design.EthernetSwitch*"`
+  → `uninstall pkgutil: "com.blackmagic-design.EthernetSwitch.*"`
 
 Install-verified in `6e7f808`: fetch matches the pinned `sha256`, install completes, uninstall
 forgets all three receipts. Two corrections from that run: the uninstall stanza is a regex, so it is
