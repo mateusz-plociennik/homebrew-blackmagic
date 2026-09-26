@@ -11,7 +11,7 @@ require "open3"
 require "tmpdir"
 require_relative "support"
 
-SCRIPT = File.expand_path("../bin/dispatch-bump-ci", __dir__).freeze
+DISPATCH_SCRIPT = File.expand_path("../bin/dispatch-bump-ci", __dir__).freeze
 
 STUB_GH = <<~'SH'
   #!/bin/bash
@@ -39,7 +39,7 @@ def dispatch(prs, runs: [], failing: [], failing_comments: [], commented: [], pr
     commented.each { |pr| File.write("#{dir}/commented-#{pr}", "") }
     File.write("#{dir}/pr-list-fails", "") if pr_list_fails
     env = { "PATH" => "#{dir}:#{ENV.fetch("PATH")}", "FIXTURES" => dir, "REPO" => "o/r", "TAP" => "o/t" }
-    _, status = Open3.capture2e(env, SCRIPT)
+    _, status = Open3.capture2e(env, DISPATCH_SCRIPT)
     calls = File.exist?("#{dir}/log") ? File.readlines("#{dir}/log", chomp: true) : []
     [status.success?, calls]
   end
