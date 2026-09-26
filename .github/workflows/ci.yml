@@ -71,6 +71,9 @@ jobs:
       - name: Run the receipt comparison tests
         run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/compare_receipts_test.rb"
 
+      - name: Run the bump CI dispatch tests
+        run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/dispatch_bump_ci_test.rb"
+
       - name: Run the changed-casks tests
         run: bash "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/changed_casks_test.sh"
 

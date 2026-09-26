@@ -1,0 +1,73 @@
+#!/bin/bash
+# Run by bump.yml after `brew bump`: dispatches ci.yml for every open bump PR whose head commit has no
+# CI run yet, and comments the reviewer's next steps. Reconciling against all open bump PRs, not just
+# the ones this run opened, is what lets a PR left behind by a cancelled run or a failed dispatch get
+# CI on the next run. A run of any event or outcome on the head commit counts, so nothing is re-run.
+# The comment is reconciled separately, so a failed one is retried without redispatching CI.
+#
+# Needs REPO (owner/name), TAP, and a `gh` authorised for REPO.
+set -euo pipefail
+: "${REPO:?}" "${TAP:?}"
+
+# Read from ci.yml so the comment and the install job cannot disagree about what is skipped.
+skip=$(sed -n 's/^ *SKIP_CASKS: *//p' "$(dirname "$0")/../.github/workflows/ci.yml")
+# `--limit` because `gh pr list` pages at 30. Assigned, not piped, so a failed snapshot fails the step.
+prs=$(gh pr list --repo "$REPO" --state open --limit 500 --json number,headRefName,headRefOid \
+        --jq '.[] | "\(.number) \(.headRefName) \(.headRefOid)"')
+
+failed=""
+# fd 3, so a `gh` in the loop that reads stdin cannot swallow the rest of the list.
+while read -r pr branch sha <&3; do
+  [[ "$branch" == bump-* ]] || continue
+  runs=$(gh run list --repo "$REPO" --workflow ci.yml --commit "$sha" --limit 1 --json databaseId --jq length)
+  if [[ "$runs" != 0 ]]; then
+    echo "#$pr: CI already has a run for $sha"
+  elif gh workflow run ci.yml --repo "$REPO" --ref "$branch" -f pr="$pr"; then
+    echo "#$pr: dispatched CI on $branch"
+  else
+    echo "::warning::Could not dispatch CI for #$pr ($branch); the next bump run retries. If it keeps failing, see HANDOFF.md."
+    failed="$failed #$pr"
+    continue
+  fi
+
+  commented=$(gh pr view "$pr" --repo "$REPO" --json comments \
+                --jq '[.comments[] | select(.body | startswith("### Next steps"))] | length')
+  [[ "$commented" == 0 ]] || continue
+
+  diff=$(gh pr diff "$pr" --repo "$REPO")
+  cask=$(sed -n 's|^+++ b/Casks/\(.*\)\.rb$|\1|p' <<<"$diff" | head -1)
+  old=$(sed -n 's/^-  version "\(.*\)"$/\1/p' <<<"$diff")
+  new=$(sed -n 's/^+  version "\(.*\)"$/\1/p' <<<"$diff")
+
+  runs_url="https://github.com/$REPO/actions/workflows/ci.yml?query=branch%3A$branch"
+  comment=$(mktemp)
+  {
+    echo "### Next steps"
+    echo
+    echo "[CI]($runs_url) runs on this branch."
+    echo "It runs style, audit, the tests, and a real install + uninstall of \`$cask\` on a fresh runner."
+    echo
+    if [[ " $skip " == *" $cask "* ]]; then
+      echo "- [ ] \`$cask\` is registration-gated, so CI skips the install. Before merging, run locally:"
+      echo "      \`brew install --cask $TAP/$cask && brew uninstall --cask $TAP/$cask\`"
+    else
+      echo "- [ ] CI green → merge. The install proves the \`pkg\` name, the uninstall proves the receipts."
+      echo "- [ ] CI red on **install** → this release renamed its pkg or receipts. Fix the cask on this branch;"
+      echo "      To see what the artifact contains now, scaffold a throwaway copy into a temp dir (downloads the full artifact):"
+      echo "      \`cd \"\$(brew --repo $TAP)\" && brew ruby -e 'require \"./lib/bmd_cask_generator\"; Dir.mktmpdir { |d| puts File.read(BmdCaskGenerator.generate(ARGV[0], version: ARGV[1], casks_dir: d)) }' \"<Product>\" $new\`"
+      echo "      \`<Product>\` is the cask's \`data: { \"product\" => … }\` value. \`bin/generate-cask\` itself refuses an existing cask."
+    fi
+    if [[ "${old%%.*}" != "${new%%.*}" ]]; then
+      echo "- [ ] Major version ($old → $new): check Blackmagic's release notes for a raised macOS minimum."
+      echo "      Bumps never raise \`depends_on\`, and CI's runner is on the newest macOS so it can't catch one."
+    fi
+  } > "$comment"
+  # A failed comment must not stop the remaining PRs.
+  if ! gh pr comment "$pr" --repo "$REPO" --body-file "$comment"; then
+    echo "::warning::Could not comment on #$pr; the next bump run retries."
+    failed="$failed #$pr"
+  fi
+  rm -f "$comment"
+done 3<<<"$prs"
+
+[[ -z "$failed" ]] || { echo "Dispatch or comment failed for:$failed"; exit 1; }

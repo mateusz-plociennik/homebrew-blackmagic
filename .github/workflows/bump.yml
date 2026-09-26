@@ -87,16 +87,6 @@ jobs:
             fi
           done
 
-      - name: Record open PRs
-        if: inputs.report-only != true
-        env:
-          GH_TOKEN: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          gh pr list --repo "$REPO" --state open --limit 500 --json number \
-            --jq '.[].number' | sort > "$RUNNER_TEMP/open-before"
-
       - name: Run brew bump
         env:
           HOMEBREW_GIT_NAME: github-actions[bot]
@@ -114,50 +104,12 @@ jobs:
           [[ "$REPORT_ONLY" == "true" ]] || args+=(--open-pr --no-fork)
           brew bump "${args[@]}"
 
-      - name: Verify and annotate new bump PRs
-        # `!cancelled()` so a PR opened before another cask's bump failed still gets verified.
+      - name: Verify and annotate bump PRs
+        # `!cancelled()` so a PR opened before another cask's bump failed still gets verified. PRs a
+        # cancelled run left behind are caught by the next run: the script checks every open bump PR.
         if: ${{ !cancelled() && inputs.report-only != true }}
         env:
           GH_TOKEN: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           TAP: ${{ steps.set-up-homebrew.outputs.tap-name }}
-        run: |
-          set -euo pipefail
-          # Read from ci.yml so the comment and the install job cannot disagree about what is skipped.
-          skip=$(sed -n 's/^ *SKIP_CASKS: *//p' "$(brew --repo "$TAP")/.github/workflows/ci.yml")
-          gh pr list --repo "$REPO" --state open --limit 500 --json number \
-            --jq '.[].number' | sort > "$RUNNER_TEMP/open-after"
-          for pr in $(comm -13 "$RUNNER_TEMP/open-before" "$RUNNER_TEMP/open-after"); do
-            branch=$(gh pr view "$pr" --repo "$REPO" --json headRefName --jq .headRefName)
-            [[ "$branch" == bump-* ]] || continue
-            diff=$(gh pr diff "$pr" --repo "$REPO")
-            cask=$(sed -n 's|^+++ b/Casks/\(.*\)\.rb$|\1|p' <<<"$diff" | head -1)
-            old=$(sed -n 's/^-  version "\(.*\)"$/\1/p' <<<"$diff")
-            new=$(sed -n 's/^+  version "\(.*\)"$/\1/p' <<<"$diff")
-
-            gh workflow run ci.yml --repo "$REPO" --ref "$branch" -f pr="$pr"
-
-            runs="https://github.com/$REPO/actions/workflows/ci.yml?query=branch%3A$branch"
-            {
-              echo "### Next steps"
-              echo
-              echo "[CI]($runs) was dispatched on this branch."
-              echo "It runs style, audit, the tests, and a real install + uninstall of \`$cask\` on a fresh runner."
-              echo
-              if [[ " $skip " == *" $cask "* ]]; then
-                echo "- [ ] \`$cask\` is registration-gated, so CI skips the install. Before merging, run locally:"
-                echo "      \`brew install --cask $TAP/$cask && brew uninstall --cask $TAP/$cask\`"
-              else
-                echo "- [ ] CI green → merge. The install proves the \`pkg\` name, the uninstall proves the receipts."
-                echo "- [ ] CI red on **install** → this release renamed its pkg or receipts. Fix the cask on this branch;"
-                echo "      To see what the artifact contains now, scaffold a throwaway copy into a temp dir (downloads the full artifact):"
-                echo "      \`cd \"\$(brew --repo $TAP)\" && brew ruby -e 'require \"./lib/bmd_cask_generator\"; Dir.mktmpdir { |d| puts File.read(BmdCaskGenerator.generate(ARGV[0], version: ARGV[1], casks_dir: d)) }' \"<Product>\" $new\`"
-                echo "      \`<Product>\` is the cask's \`data: { \"product\" => … }\` value. \`bin/generate-cask\` itself refuses an existing cask."
-              fi
-              if [[ "${old%%.*}" != "${new%%.*}" ]]; then
-                echo "- [ ] Major version ($old → $new): check Blackmagic's release notes for a raised macOS minimum."
-                echo "      Bumps never raise \`depends_on\`, and CI's runner is on the newest macOS so it can't catch one."
-              fi
-            } > "$RUNNER_TEMP/comment.md"
-            gh pr comment "$pr" --repo "$REPO" --body-file "$RUNNER_TEMP/comment.md"
-          done
+        run: '"$(brew --repo "$TAP")/bin/dispatch-bump-ci"'
