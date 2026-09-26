@@ -96,8 +96,10 @@ module BmdCaskGenerator
     def macos_symbol_for(min_version)
       return if min_version.blank?
 
-      wanted = min_version.split(".").map(&:to_i)
-      version, symbol = MACOS_SYMBOLS.find { |candidate, _| (candidate.split(".").map(&:to_i) <=> wanted) >= 0 }
+      # Trailing zeros dropped so "15.0" compares equal to "15", not above it.
+      parts = ->(v) { v.split(".").map(&:to_i).reverse.drop_while(&:zero?).reverse }
+      wanted = parts.call(min_version)
+      version, symbol = MACOS_SYMBOLS.find { |candidate, _| (parts.call(candidate) <=> wanted) >= 0 }
       raise GeneratorError, "no macOS release Homebrew knows of covers #{min_version}" if symbol.nil?
 
       symbol if version != MACOS_SYMBOLS.keys.first
