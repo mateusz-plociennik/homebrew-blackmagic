@@ -89,19 +89,33 @@ jobs:
       - name: Trust the tap
         run: brew trust --tap ${{ steps.set-up-homebrew.outputs.tap-name }}
 
-      - name: Install and uninstall each changed cask
+      - name: List the casks this PR changes
+        id: changed
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAP: ${{ steps.set-up-homebrew.outputs.tap-name }}
           PR: ${{ github.event.pull_request.number || inputs.pr }}
         run: |
-          set -eu
+          set -euo pipefail
           # The PR's own diff, not a diff against main, so casks main changed since don't get installed.
-          casks=$(gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" --name-only | sed -n 's|^Casks/\(.*\)\.rb$|\1|p')
-          [ -n "$casks" ] || { echo "No casks changed"; exit 0; }
+          # Existence check drops casks the PR deletes or renames away.
+          casks=""
+          for cask in $(gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" --name-only | sed -n 's|^Casks/\(.*\)\.rb$|\1|p'); do
+            if [ -f "$(brew --repo "$TAP")/Casks/$cask.rb" ]; then casks="$casks $cask"; fi
+          done
+          echo "casks=$casks" >> "$GITHUB_OUTPUT"
+
+      - name: Install and uninstall each changed cask
+        # No token in this step: `brew install` evaluates the PR's cask Ruby.
+        env:
+          TAP: ${{ steps.set-up-homebrew.outputs.tap-name }}
+          CASKS: ${{ steps.changed.outputs.casks }}
+        run: |
+          set -eu
+          [ -n "$CASKS" ] || { echo "No casks changed"; exit 0; }
 
           failed=""
-          for cask in $casks; do
+          for cask in $CASKS; do
             case " $SKIP_CASKS " in
               *" $cask "*) echo "::notice::Skipping $cask: registration-gated, install it locally"; continue ;;
             esac

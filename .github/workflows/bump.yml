@@ -92,6 +92,7 @@ jobs:
           GH_TOKEN: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
+          set -euo pipefail
           gh pr list --repo "$REPO" --state open --limit 500 --json number \
             --jq '.[].number' | sort > "$RUNNER_TEMP/open-before"
 
@@ -120,7 +121,7 @@ jobs:
           REPO: ${{ github.repository }}
           TAP: ${{ steps.set-up-homebrew.outputs.tap-name }}
         run: |
-          set -eu
+          set -euo pipefail
           # Read from ci.yml so the comment and the install job cannot disagree about what is skipped.
           skip=$(sed -n 's/^ *SKIP_CASKS: *//p' "$(brew --repo "$TAP")/.github/workflows/ci.yml")
           gh pr list --repo "$REPO" --state open --limit 500 --json number \
@@ -139,7 +140,7 @@ jobs:
             {
               echo "### Next steps"
               echo
-              echo "[CI]($runs) was dispatched on this branch; bump PRs get no \`pull_request\` run of their own."
+              echo "[CI]($runs) was dispatched on this branch."
               echo "It runs style, audit, the tests, and a real install + uninstall of \`$cask\` on a fresh runner."
               echo
               if [[ " $skip " == *" $cask "* ]]; then
