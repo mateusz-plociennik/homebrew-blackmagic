@@ -1,0 +1,2 @@
+# `brew test-bot`, which `bin/verify` runs, drops this in whatever directory it started from.
+steps_output.txt
