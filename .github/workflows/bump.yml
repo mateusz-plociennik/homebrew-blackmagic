@@ -149,7 +149,9 @@ jobs:
               else
                 echo "- [ ] CI green → merge. The install proves the \`pkg\` name, the uninstall proves the receipts."
                 echo "- [ ] CI red on **install** → this release renamed its pkg or receipts. Fix the cask on this branch;"
-                echo "      \`brew ruby bin/generate-cask \"<Product>\" $new\` prints what the artifact contains now."
+                echo "      To see what the artifact contains now, scaffold a throwaway copy into a temp dir (downloads the full artifact):"
+                echo "      \`cd \"\$(brew --repo $TAP)\" && brew ruby -e 'require \"./lib/bmd_cask_generator\"; puts File.read(BmdCaskGenerator.generate(ARGV[0], version: ARGV[1], casks_dir: Dir.mktmpdir))' \"<Product>\" $new\`"
+                echo "      \`<Product>\` is the cask's \`data: { \"product\" => … }\` value. \`bin/generate-cask\` itself refuses an existing cask."
               fi
               if [[ "${old%%.*}" != "${new%%.*}" ]]; then
                 echo "- [ ] Major version ($old → $new): check Blackmagic's release notes for a raised macOS minimum."
