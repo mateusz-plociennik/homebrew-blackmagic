@@ -8,11 +8,14 @@ trap 'rm -rf "${stub}"' EXIT
 export PR=1 GITHUB_REPOSITORY=owner/repo PATH="${stub}:${PATH}"
 
 stub_gh() {
-  printf '#!/bin/sh\n%s\n' "$1" > "${stub}/gh"
+  printf '#!/bin/sh\n%s\n' "$1" >"${stub}/gh"
   chmod +x "${stub}/gh"
 }
 
-fail() { echo "FAIL: $*"; exit 1; }
+fail() {
+  echo "FAIL: $*"
+  exit 1
+}
 
 stub_gh 'exit 1'
 if out=$("${root}/bin/changed-casks" 2>&1); then fail "gh failure was not propagated (got '${out}')"; fi
