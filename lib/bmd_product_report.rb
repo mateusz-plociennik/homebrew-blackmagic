@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "json"
+require "open3"
 # The tap test runner preloads Set, but this module also runs as a standalone Ruby script.
 # rubocop:disable Lint/RedundantRequireStatement
 require "set" unless defined?(Set)
@@ -16,6 +17,8 @@ require_relative "bmd_skip_list"
 # point on the same script); `lib/bmd_catalog.rb` is unchanged by this.
 module BmdProductReport
   ISSUE_TITLE = "New Blackmagic products with no cask"
+
+  class ReportError < StandardError; end
 
   class << self
     # ---------------------------------------------------------------------
@@ -128,18 +131,34 @@ module BmdProductReport
       end
 
       body = render_issue_body(missing_products, stale)
-      IO.popen(["gh", "issue", "create", "--title", ISSUE_TITLE, "--body-file", "-"], "w") { |io| io.write(body) }
+      puts gh("issue", "create", "--title", ISSUE_TITLE, "--body-file", "-", stdin: body)
+    end
+
+    # Raises `ReportError` on a nonzero exit, so a failed lookup never reads as "no issues".
+    def gh(*args, stdin: nil)
+      out, err, status = Open3.capture3("gh", *args, stdin_data: stdin.to_s)
+      return out if status.success?
+
+      raise ReportError, "gh #{args.first(2).join(" ")} failed (#{status.exitstatus}): #{err.strip}"
+    rescue SystemCallError => e
+      raise ReportError, "gh #{args.first(2).join(" ")} failed: #{e.message}"
+    end
+
+    def gh_json(*args)
+      data = JSON.parse(gh(*args))
+      raise ReportError, "gh #{args.first(2).join(" ")} returned #{data.class}, not Array" unless data.is_a?(Array)
+
+      data
+    rescue JSON::ParserError => e
+      raise ReportError, "gh #{args.first(2).join(" ")} returned invalid JSON: #{e.message}"
     end
 
     def find_open_issue(missing_names)
-      out = `gh issue list --state open --limit 200 --search #{ISSUE_TITLE.inspect} \
-        --json number,title,body 2>/dev/null`
       expected = missing_names.sort
-      JSON.parse(out).find do |issue|
+      gh_json("issue", "list", "--state", "open", "--limit", "200", "--search", ISSUE_TITLE,
+              "--json", "number,title,body").find do |issue|
         issue["title"] == ISSUE_TITLE && issue_products(issue["body"]) == expected
       end&.fetch("number")
-    rescue JSON::ParserError
-      nil
     end
 
     def issue_products(body)
@@ -150,10 +169,7 @@ module BmdProductReport
     end
 
     def open_issue_numbers
-      out = `gh issue list --state open --limit 200 --json number 2>/dev/null`
-      JSON.parse(out).map { |issue| issue["number"] }
-    rescue JSON::ParserError
-      []
+      gh_json("issue", "list", "--state", "open", "--limit", "200", "--json", "number").map { |i| i["number"] }
     end
   end
 end

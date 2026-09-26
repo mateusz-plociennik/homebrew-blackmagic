@@ -27,7 +27,12 @@ when nil, "-h", "--help"
   exit(ARGV.empty? ? 1 : 0)
 when "--report-missing"
   require_relative "../lib/bmd_product_report"
-  BmdProductReport.run
+  begin
+    BmdProductReport.run
+  rescue BmdProductReport::ReportError, BmdCatalog::CatalogError => e
+    warn "generate-cask: #{e.message}"
+    exit 1
+  end
 else
   product_name, version = ARGV
   begin
