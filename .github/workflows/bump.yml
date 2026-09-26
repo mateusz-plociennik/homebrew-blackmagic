@@ -13,8 +13,8 @@ name: Bump casks
 
 on:
   schedule:
-    # Every third day. Blackmagic ship releases irregularly, so there is no window worth targeting.
-    - cron: "17 6 */3 * *"
+    # Mondays and Thursdays. Blackmagic ship releases irregularly, so there is no window worth targeting.
+    - cron: "17 6 * * 1,4"
   workflow_dispatch:
     inputs:
       report-only:
