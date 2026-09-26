@@ -1,9 +1,12 @@
 # Handoff — Blackmagic Design Homebrew tap
 
-Status: **research complete, design agreed, nothing built yet.** Repo has zero commits.
+Status: **built and in use.** Five casks in `Casks/`, the shared strategy and helpers in `lib/`,
+`bin/generate-cask` for scaffolding, and three workflows: per-PR `ci.yml`, daily `bump.yml`, weekly
+`audit-online.yml`. Ethernet Switch and Resolve are install-verified (below); the other casks have no
+recorded install.
 
-Next session: implement the POC (download strategy + one cask + README + CI), then run a full
-install/uninstall cycle.
+Next steps: the open GitHub issues. Sections below are dated by the issue that settled them; where a
+later issue reversed an earlier plan, the earlier text is struck through or marked superseded.
 
 ## Goal
 
@@ -64,7 +67,8 @@ return `{"mac":null}` with a 200. `davinci-resolve` does resolve correctly (21.0
 **Neither endpoint can list releases** — both return exactly one release per platform. The catalog is
 the only enumeration. `nav.json` (82 KB, `/api/support/{country}/nav.json`) maps products to families
 but carries no versions, `/api/v1/model/` is a countries list, and `sw.blackmagicdesign.com` has no
-directory listing. So livecheck reads the catalog; see `lib/bmd_livecheck.rb`.
+directory listing. So livecheck reads the catalog; see `BmdCatalog.release_regex` and
+`BmdCatalog::MAC_RELEASES` in `lib/bmd_catalog.rb`.
 
 ### 3. Link resolution
 `POST https://www.blackmagicdesign.com/api/register/{country}/download/{downloadId}`,
@@ -132,7 +136,8 @@ brew install --cask mateusz-plociennik/blackmagic/blackmagic-ethernet-switch
 ```
 
 **Custom download strategy** in `lib/bmd_download_strategy.rb`, a `CurlDownloadStrategy` subclass
-shared by all casks via `require_relative`. Overrides `_fetch` to POST for a signed URL, then curl that.
+shared by all casks, which load it with `require` inside the `cask` block (~~`require_relative`~~ —
+superseded, see "Requires go inside" below). Overrides `_fetch` to POST for a signed URL, then curl that.
 
 **Cask `url` holds the stable *unsigned* path** with `#{version}` interpolated, never the signed one.
 Reason: `AbstractFileDownloadStrategy#cached_location`
@@ -205,11 +210,13 @@ Chosen because it takes the anonymous path (no PII) and the artifact is already 
 - structure: `.zip` → `Blackmagic_Ethernet_Switch_1.2.dmg` → `Install Ethernet Switch 1.2.pkg` (807 MB).
   Homebrew's `extract_nestedly` unwraps zip→dmg automatically, so a `pkg` stanza works directly.
 - pkg receipts: `com.blackmagic-design.EthernetSwitch`, `…EthernetSwitchAssets`, `…EthernetSwitchUninstaller`
-  → `uninstall pkgutil: "com.blackmagic-design.EthernetSwitch*"`
+  → `uninstall pkgutil: "com.blackmagic-design.EthernetSwitch.*"`
 
-A copy of the zip may still be at `/tmp/es.zip` (369 MB) — check before re-downloading.
+Install-verified in `6e7f808`: fetch matches the pinned `sha256`, install completes, uninstall
+forgets all three receipts. Two corrections from that run: the uninstall stanza is a regex, so it is
+`EthernetSwitch.*`, not `EthernetSwitch*`; and the pkg's 10.14 minimum has no Homebrew symbol.
 
-## Work remaining this session
+## Original POC plan (historical — all done)
 
 1. `git branch -m master main`; rename GitHub repo `homebrew-tap` → `homebrew-blackmagic`
    (`gh repo rename homebrew-blackmagic`) and the local directory to match.
@@ -335,7 +342,7 @@ everything below them needs a real pkg.
 
 ## Suggested skills
 
-- `mattpocock-skills:code-review` — after the strategy and cask are written, before the real install.
+- `mattpocock-skills:code-review` — for any change to the strategy, resolver or config handling.
   The strategy handles user PII and executes a fetch against a URL returned by a remote endpoint;
   worth a careful pass.
 - `security-review` — same rationale, specifically for the config-file handling and the
