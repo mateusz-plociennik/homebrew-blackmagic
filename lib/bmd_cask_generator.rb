@@ -4,10 +4,12 @@
 require "digest"
 require "fileutils"
 require "tmpdir"
-require "json"
+require "macos_version"
 require "utils/curl"
 
 require_relative "bmd_catalog"
+require_relative "bmd_resolver"
+require_relative "bmd_terms"
 
 # Scaffolds a cask from Blackmagic's catalog, readme and artifact. See #10.
 #
@@ -22,14 +24,7 @@ module BmdCaskGenerator
 
   README_URL_TEMPLATE = "https://www.blackmagicdesign.com/support/content/readme/%<release_id>s"
   FAMILY_HOMEPAGE_TEMPLATE = "https://www.blackmagicdesign.com/support/family/%<slug>s"
-  RESOLVE_ENDPOINT = "https://www.blackmagicdesign.com/api/register/%<country>s/download/%<id>s"
-  SITE = "https://www.blackmagicdesign.com"
   HTTP_STATUS_WRITE_OUT = format("%%%<token>s", token: "{http_code}").freeze
-
-  # Same empty override as `BmdDownloadStrategy::USER_AGENT` — the resolve endpoint 400s any UA
-  # containing "curl", which is Homebrew's default. Duplicated rather than shared because that file
-  # is the install-time trust boundary and this one is not; see the module comment above.
-  USER_AGENT = ""
 
   # Per-product `desc`/`homepage`/`token` overrides, for the handful where the derived value is wrong
   # or a real product page exists. Keyed on the catalog product name.
@@ -39,18 +34,10 @@ module BmdCaskGenerator
     },
   }.freeze
 
-  # The oldest macOS a pkg's own installer check can name, mapped to the oldest symbol Homebrew can
-  # still express for it. Homebrew no longer supports Catalina, so anything below macOS 11 gets
-  # `:big_sur`.
-  MACOS_SYMBOLS = {
-    "11" => :big_sur,
-    "12" => :monterey,
-    "13" => :ventura,
-    "14" => :sonoma,
-    "15" => :sequoia,
-    "26" => :tahoe,
-    "27" => :golden_gate,
-  }.freeze
+  # Every macOS release a cask can name, oldest first. Read from Homebrew rather than written out so
+  # the floor moves when Homebrew drops a release: `Homebrew/OSDependsOn` fails a cask that names one
+  # at or below the oldest supported, which is how a hand-written copy would go stale.
+  MACOS_SYMBOLS = MacOSVersion::SYMBOLS.invert.sort_by { |version, _| version.split(".").map(&:to_i) }.to_h.freeze
 
   # The version in a pkg's own `pm_install_check()` OS test, whichever way round the comparison is
   # written. Both orders are in the wild — Ethernet Switch has
@@ -101,14 +88,19 @@ module BmdCaskGenerator
 
     # The Homebrew `depends_on macos:` symbol for the version string a pkg's own installer check
     # names (e.g. `"10.14"`), rounded *up* to the nearest symbol Homebrew can express.
+    #
+    # `nil` when the pkg names nothing, and also when it names the oldest release Homebrew still
+    # supports or older: every mac Homebrew will install on already clears that floor, so naming it is
+    # redundant and `Homebrew/OSDependsOn` fails the cask for it. Both render as a bare
+    # `depends_on :macos`.
     def macos_symbol_for(min_version)
       return if min_version.blank?
 
       wanted = min_version.split(".").map(&:to_i)
-      symbol = MACOS_SYMBOLS
-               .sort_by { |version, _| version.split(".").map(&:to_i) }
-               .find { |version, _| (version.split(".").map(&:to_i) <=> wanted) >= 0 }
-      symbol&.last
+      version, symbol = MACOS_SYMBOLS.find { |candidate, _| (candidate.split(".").map(&:to_i) <=> wanted) >= 0 }
+      raise GeneratorError, "no macOS release Homebrew knows of covers #{min_version}" if symbol.nil?
+
+      symbol if version != MACOS_SYMBOLS.keys.first
     end
 
     # The regex a cask's `uninstall pkgutil:` stanza passes to `pkgutil --pkgs=`: the longest common
@@ -177,7 +169,9 @@ module BmdCaskGenerator
             regex BmdCatalog.release_regex(#{product.dump})
             strategy :json, &BmdCatalog::MAC_RELEASES
           end
-        #{"\n  depends_on macos: :#{macos_symbol}\n" if macos_symbol}
+
+          depends_on #{macos_symbol ? "macos: :#{macos_symbol}" : ":macos"}
+
           pkg #{pkg_filename.dump.gsub('\#{version}', '#{version}')}
 
           uninstall pkgutil: #{pkgutil_regex.dump}
@@ -200,10 +194,24 @@ module BmdCaskGenerator
         latest_mac_release(releases, product_name)
       end
 
-      if BmdCatalog.requires_terms?(release)
+      # Same gate as `BmdDownloadStrategy#_fetch`, and for the same reason: scaffolding downloads the
+      # artifact, so it needs the licence accepted first, and only the person running this can accept
+      # it. The refusal shows the agreement rather than naming it — `BmdTerms.text` raises if it
+      # cannot read it, which stops the scaffold either way.
+      terms = BmdCatalog.requires_terms?(release)
+      if terms && !BmdConfig.accepts_terms?
         raise GeneratorError, <<~MESSAGE
-          "#{release["name"]}" requires accepting Blackmagic's licence terms, which this tap does not do
-          on anyone's behalf (blocked on #6).
+          "#{release["name"]}" requires accepting Blackmagic Design's licence agreement.
+
+          #{BmdTerms.text(release["termsAndConditions"], timeout:)}
+
+          (#{BmdTerms.url(release["termsAndConditions"])})
+
+          If you agree to it, record that in #{BmdConfig.path}:
+
+          { "agreeToTerms": true }
+
+          Nothing has been downloaded.
         MESSAGE
       end
 
@@ -235,7 +243,8 @@ module BmdCaskGenerator
       raise GeneratorError, "homepage #{homepage} did not answer HTTP 200" unless homepage_ok?(homepage, timeout:)
 
       signed_url = mint_signed_url(download_id, product: product_name,
-                                   registration: BmdCatalog.requires_registration?(release), timeout:)
+                                   registration: BmdCatalog.requires_registration?(release),
+                                   terms:, timeout:)
 
       Dir.mktmpdir("bmd-generate-cask") do |dir|
         zip_path = File.join(dir, "artifact.zip")
@@ -299,59 +308,14 @@ module BmdCaskGenerator
       result.success? && result.stdout.strip == "200"
     end
 
-    # Mints a signed download URL, same request shape as `BmdDownloadStrategy` — including the
+    # Mints a signed download URL through `BmdResolver`, the same code the install path runs — with the
     # registration fields when the release needs them, since scaffolding a registration-path cask means
-    # actually downloading its artifact. Terms-gated releases never reach here; `generate` refuses them.
-    #
-    # `retries: 0` for the same reason the strategy sets it: a registration POST that Blackmagic
-    # accepted must not be replayed just because the response never arrived.
-    def mint_signed_url(download_id, product: nil, registration: false, timeout: nil)
-      endpoint = format(RESOLVE_ENDPOINT, country: BmdCatalog.country, id: download_id)
-      body = {
-        "platform" => BmdCatalog::PLATFORM,
-        "policy"   => true,
-        "country"  => BmdCatalog.country,
-        "origin"   => "www.blackmagicdesign.com",
-      }
-      body = if registration
-        # `product` is what marks the request as a registration rather than an anonymous download; see
-        # `BmdDownloadStrategy#request_body`.
-        body.merge("product" => product, **BmdConfig.registration_details)
-      else
-        body.merge("downloadOnly" => true)
-      end
-
-      result = Utils::Curl.curl_output(
-        "--request", "POST",
-        "--header", "Content-Type: application/json;charset=UTF-8",
-        "--header", "Accept: application/json, text/plain, */*",
-        "--header", "Origin: #{SITE}",
-        "--header", "Referer: #{SITE}/#{BmdCatalog.country}/support/",
-        "--data-raw", JSON.generate(body),
-        endpoint,
-        retries:    0,
-        user_agent: USER_AGENT,
-        timeout:
-      )
-
-      response = result.stdout.strip
-      if !result.success? || !response.start_with?("https://")
-        raise GeneratorError,
-              "Blackmagic Design refused to issue a download URL: " \
-              "#{response.presence || "(empty)"}#{registration_hint(response)}"
-      end
-
-      response
-    end
-
-    # Blackmagic answer a bad set of identity fields with a refusal that mentions registration, and
-    # their wording names nothing the user can act on. Point at the file the fields came from, exactly
-    # as `BmdDownloadStrategy#registration_hint` does at install time.
-    def registration_hint(response)
-      return "" unless response.match?(/regist/i)
-
-      "\nRegistration details come from #{BmdConfig.path} (or #{BmdConfig::ENV_PREFIX}* in the " \
-        "environment) — check that every field there is one Blackmagic would accept."
+    # actually downloading its artifact, and `hasAgreedToTerms` for a gated release, which `generate`
+    # only reaches once the config file carries the opt-in.
+    def mint_signed_url(download_id, product: nil, registration: false, terms: false, timeout: nil)
+      BmdResolver.mint_signed_url(download_id, product:, registration:, terms:, timeout:)
+    rescue BmdResolver::RefusedError => e
+      raise GeneratorError, e.message
     end
 
     def unsigned_path(signed_url)

@@ -33,6 +33,7 @@ module BmdConfig
   ENV_PREFIX = "BMD_TAP_"
 
   COUNTRY_FIELD = "country"
+  TERMS_FIELD = "agreeToTerms"
 
   # What Blackmagic's resolve endpoint demands of a `requiresRegistration` release, on top of the
   # anonymous body. All of them: the endpoint 400s on a partial set, and it is the same set their own
@@ -66,6 +67,17 @@ module BmdConfig
       raise ConfigError, missing_message(missing) if missing.any?
 
       values
+    end
+
+    # Whether the user has explicitly opted into accepting terms and conditions.
+    # Acceptance is never inferred: it must be an explicit key in the config, and the value must be
+    # `true` (not just any truthy value, not a string, literally the JSON boolean true).
+    #
+    # Deliberately not `field` — this is the one setting the environment cannot supply. Accepting a
+    # licence on the user's behalf should be an act they performed once in a file they wrote, not a
+    # variable that can ride along on a single `brew install` line or be exported by a script.
+    def accepts_terms?
+      file_data[TERMS_FIELD] == true
     end
 
     # One field, environment first. `nil` when neither source has it — callers decide whether that is

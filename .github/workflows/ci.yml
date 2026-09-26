@@ -5,6 +5,14 @@ on:
     branches:
       - main
   pull_request:
+  # `bump.yml` dispatches this for each bump PR it opens: a PR authored by `GITHUB_TOKEN` fires no
+  # `pull_request` run, but `workflow_dispatch` is exempt from that rule.
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number whose changed casks the install job should test
+        type: string
+        required: true
 
 concurrency:
   group: ${{ github.ref }}-${{ github.workflow }}
@@ -12,6 +20,7 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   test-bot:
@@ -49,8 +58,79 @@ jobs:
       - name: Run the registration config tests
         run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/bmd_config_test.rb"
 
+      - name: Run the resolve-request tests
+        run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/bmd_resolver_test.rb"
+
+      - name: Run the terms-and-conditions tests
+        run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/bmd_terms_test.rb"
+
       - name: Run the cask generator tests
         run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/bmd_cask_generator_test.rb"
 
       - name: Run the missing-products report tests
         run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/bmd_product_report_test.rb"
+
+  install:
+    # What the offline checks cannot prove about a new release: that its `pkg` name still matches, and
+    # that `uninstall pkgutil:` removes every receipt it writes. Downloads the artifact, so PRs only.
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    env:
+      # Same list and reason as `audit-online.yml`: registration-path casks need a real identity.
+      SKIP_CASKS: blackmagic-davinci-resolve
+    steps:
+      - name: Set up Homebrew
+        id: set-up-homebrew
+        uses: Homebrew/actions/setup-homebrew@main
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          cask: true
+
+      - name: Trust the tap
+        run: brew trust --tap ${{ steps.set-up-homebrew.outputs.tap-name }}
+
+      - name: List the casks this PR changes
+        id: changed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAP: ${{ steps.set-up-homebrew.outputs.tap-name }}
+          PR: ${{ github.event.pull_request.number || inputs.pr }}
+        run: |
+          set -euo pipefail
+          # The PR's own diff, not a diff against main, so casks main changed since don't get installed.
+          # Existence check drops casks the PR deletes or renames away.
+          casks=""
+          for cask in $(gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" --name-only | sed -n 's|^Casks/\(.*\)\.rb$|\1|p'); do
+            if [ -f "$(brew --repo "$TAP")/Casks/$cask.rb" ]; then casks="$casks $cask"; fi
+          done
+          echo "casks=$casks" >> "$GITHUB_OUTPUT"
+
+      - name: Install and uninstall each changed cask
+        # No token in this step: `brew install` evaluates the PR's cask Ruby.
+        env:
+          TAP: ${{ steps.set-up-homebrew.outputs.tap-name }}
+          CASKS: ${{ steps.changed.outputs.casks }}
+        run: |
+          set -eu
+          [ -n "$CASKS" ] || { echo "No casks changed"; exit 0; }
+
+          failed=""
+          for cask in $CASKS; do
+            case " $SKIP_CASKS " in
+              *" $cask "*) echo "::notice::Skipping $cask: registration-gated, install it locally"; continue ;;
+            esac
+            echo "::group::$cask"
+            before=$(pkgutil --pkgs | sort)
+            if brew install --cask "$TAP/$cask" && brew uninstall --cask "$TAP/$cask"; then
+              left=$(comm -13 <(echo "$before") <(pkgutil --pkgs | sort))
+              if [ -n "$left" ]; then
+                echo "::error::$cask left receipts behind: ${left//$'\n'/ }"
+                failed="$failed $cask"
+              fi
+            else
+              failed="$failed $cask"
+            fi
+            echo "::endgroup::"
+          done
+
+          [ -z "$failed" ] || { echo "Failed:$failed"; exit 1; }

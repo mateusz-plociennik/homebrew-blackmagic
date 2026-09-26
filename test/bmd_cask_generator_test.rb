@@ -64,17 +64,28 @@ check("returns nil for a blank family") { BmdCaskGenerator.homepage_for_family(n
 
 puts "\nmacos_symbol_for"
 
-check("rounds a version below the oldest expressible symbol up to :big_sur") do
-  BmdCaskGenerator.macos_symbol_for("10.14") == :big_sur
+check("returns nil for a version below the oldest Homebrew supports") do
+  BmdCaskGenerator.macos_symbol_for("10.14").nil?
 end
 
-check("matches an exact symbol version") { BmdCaskGenerator.macos_symbol_for("11") == :big_sur }
+check("returns nil for the oldest release Homebrew supports, which needs no stanza") do
+  BmdCaskGenerator.macos_symbol_for(BmdCaskGenerator::MACOS_SYMBOLS.keys.first).nil?
+end
+
+check("matches an exact symbol version") { BmdCaskGenerator.macos_symbol_for("14") == :sonoma }
 
 check("rounds a version between two symbols up to the higher one") do
   BmdCaskGenerator.macos_symbol_for("14.5") == :sequoia
 end
 
 check("returns nil when the pkg enforces nothing") { BmdCaskGenerator.macos_symbol_for(nil).nil? }
+
+check("raises for a version newer than any release Homebrew knows") do
+  BmdCaskGenerator.macos_symbol_for("99")
+  false
+rescue BmdCaskGenerator::GeneratorError
+  true
+end
 
 puts "\nparse_distribution"
 
@@ -103,6 +114,35 @@ end
 check("returns no minimum OS when the installer checks nothing") do
   xml = format(DISTRIBUTION_TEMPLATE, comparison: "0")
   BmdCaskGenerator.parse_distribution(xml).last.nil?
+end
+
+# `installKBytes` is what separates a receipt the installer actually writes from a `pkg-ref` that
+# only points at a component file. Taking both puts an identifier in the uninstall regex that
+# `pkgutil --pkgs=` will never match, and can widen the common prefix enough to catch a neighbour.
+check("takes only the pkg-refs that carry a payload") do
+  xml = <<~XML
+    <pkg-ref id="com.blackmagic-design.EthernetSwitch"/>
+    <pkg-ref id="com.blackmagic-design.EthernetSwitch" installKBytes="4200"/>
+    <pkg-ref id="com.blackmagic-design.EthernetSwitchAssets" installKBytes="12"/>
+  XML
+  BmdCaskGenerator.parse_distribution(xml).first ==
+    ["com.blackmagic-design.EthernetSwitch", "com.blackmagic-design.EthernetSwitchAssets"]
+end
+
+puts "\nparse_single_component"
+
+# A pkg with no Distribution carries its one identifier in `PackageInfo`, and has no installer script
+# to read an OS floor from.
+check("reads the identifier out of PackageInfo") do
+  Dir.mktmpdir("bmd-generator-test") do |dir|
+    File.write(File.join(dir, "PackageInfo"), '<pkg-info identifier="com.blackmagic-design.Solo" version="1.0"/>')
+    BmdCaskGenerator.parse_single_component(dir) == [["com.blackmagic-design.Solo"], nil]
+  end
+end
+
+check_raises("refuses a pkg with neither a Distribution nor a PackageInfo", BmdCaskGenerator::GeneratorError,
+             "unrecognised artifact shape") do
+  Dir.mktmpdir("bmd-generator-test") { |dir| BmdCaskGenerator.parse_single_component(dir) }
 end
 
 puts "\nlatest_mac_release"

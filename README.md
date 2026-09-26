@@ -99,9 +99,26 @@ field is ever guessed.
 
 **Use your real details.** When a download requires registration, this tap is submitting *your*
 registration to Blackmagic — you are the party registering, the tap is just your HTTP client. It
-ships no defaults and fabricates nothing. Some releases additionally require accepting a licence
-agreement; support for those is deliberately deferred ([#6](../../issues/6)), because accepting a
-legal agreement on someone's behalf without showing them the terms isn't acceptable.
+ships no defaults and fabricates nothing.
+
+### Releases behind a licence agreement
+
+Some releases require accepting a licence agreement to download. For those, and only those, the tap
+refuses to install until you have written one more key:
+
+```json
+{ "agreeToTerms": true }
+```
+
+Run the install first: it stops without downloading anything and prints the agreement — the same
+document Blackmagic's own download form shows you, fetched from their site, not a link to it. Read it,
+and add the key if you agree.
+
+Unlike every other setting, this one is read from the config file only — there is no
+`BMD_TAP_AGREETOTERMS`. Resolving one of these downloads means the tap tells Blackmagic that you
+accepted their licence, so that has to be something you did deliberately in a file you wrote, not a
+variable that rode along on one command. Nothing is inferred from the fact that you ran `brew
+install`, and no cask currently in the tap needs this key.
 
 ## Staying up to date
 

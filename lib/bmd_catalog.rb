@@ -83,6 +83,10 @@ module BmdCatalog
   class << self
     # Delegated so the country the catalog is read from and the country a download is registered in
     # cannot disagree; `BmdConfig` owns both the default and the `BMD_TAP_COUNTRY` override.
+    #
+    # Kept as a delegate rather than having callers reach for `BmdConfig.country` because the country
+    # is a path segment on the catalog *and* resolve URLs, and both are read from here. This is the
+    # only hop — `BmdResolver` is the one caller, and nothing wraps it again.
     def country
       BmdConfig.country
     end
@@ -124,8 +128,8 @@ module BmdCatalog
       release["requiresRegistration"].present?
     end
 
-    # Whether the release additionally requires accepting a licence agreement. Deliberately unhandled
-    # — see #6 — so callers refuse rather than agree on the user's behalf.
+    # Whether the release additionally requires accepting a licence agreement. `_fetch` refuses these
+    # unless the config file carries an explicit opt-in (#6) — never agreeing on the user's behalf.
     def requires_terms?(release)
       release["requiresTermsAndConditions"].present?
     end
