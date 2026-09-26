@@ -2,8 +2,8 @@
 # Run by bump.yml after `brew bump`: dispatches ci.yml for every open bump PR whose head commit has no
 # CI run yet, and comments the reviewer's next steps. Reconciling against all open bump PRs, not just
 # the ones this run opened, is what lets a PR left behind by a cancelled run or a failed dispatch get
-# CI on the next run. A run of any event or outcome on the head commit counts, so nothing is re-run
-# and the comment is posted once per dispatch, not once per day.
+# CI on the next run. A run of any event or outcome on the head commit counts, so nothing is re-run.
+# The comment is reconciled separately, so a failed one is retried without redispatching CI.
 #
 # Needs REPO (owner/name), TAP, and a `gh` authorised for REPO.
 set -euo pipefail
@@ -22,27 +22,29 @@ while read -r pr branch sha <&3; do
   runs=$(gh run list --repo "$REPO" --workflow ci.yml --commit "$sha" --limit 1 --json databaseId --jq length)
   if [[ "$runs" != 0 ]]; then
     echo "#$pr: CI already has a run for $sha"
+  elif gh workflow run ci.yml --repo "$REPO" --ref "$branch" -f pr="$pr"; then
+    echo "#$pr: dispatched CI on $branch"
+  else
+    echo "::warning::Could not dispatch CI for #$pr ($branch); the next bump run retries. If it keeps failing, see HANDOFF.md."
+    failed="$failed #$pr"
     continue
   fi
+
+  commented=$(gh pr view "$pr" --repo "$REPO" --json comments \
+                --jq '[.comments[] | select(.body | startswith("### Next steps"))] | length')
+  [[ "$commented" == 0 ]] || continue
 
   diff=$(gh pr diff "$pr" --repo "$REPO")
   cask=$(sed -n 's|^+++ b/Casks/\(.*\)\.rb$|\1|p' <<<"$diff" | head -1)
   old=$(sed -n 's/^-  version "\(.*\)"$/\1/p' <<<"$diff")
   new=$(sed -n 's/^+  version "\(.*\)"$/\1/p' <<<"$diff")
 
-  if ! gh workflow run ci.yml --repo "$REPO" --ref "$branch" -f pr="$pr"; then
-    echo "::warning::Could not dispatch CI for #$pr ($branch); the next bump run retries. If it keeps failing, see HANDOFF.md."
-    failed="$failed #$pr"
-    continue
-  fi
-  echo "#$pr: dispatched CI on $branch"
-
   runs_url="https://github.com/$REPO/actions/workflows/ci.yml?query=branch%3A$branch"
   comment=$(mktemp)
   {
     echo "### Next steps"
     echo
-    echo "[CI]($runs_url) was dispatched on this branch."
+    echo "[CI]($runs_url) runs on this branch."
     echo "It runs style, audit, the tests, and a real install + uninstall of \`$cask\` on a fresh runner."
     echo
     if [[ " $skip " == *" $cask "* ]]; then
@@ -60,9 +62,9 @@ while read -r pr branch sha <&3; do
       echo "      Bumps never raise \`depends_on\`, and CI's runner is on the newest macOS so it can't catch one."
     fi
   } > "$comment"
-  # CI is already dispatched, so a failed comment must not stop the remaining PRs.
+  # A failed comment must not stop the remaining PRs.
   if ! gh pr comment "$pr" --repo "$REPO" --body-file "$comment"; then
-    echo "::warning::Could not comment on #$pr; CI was dispatched, post the next steps by hand."
+    echo "::warning::Could not comment on #$pr; the next bump run retries."
     failed="$failed #$pr"
   fi
   rm -f "$comment"

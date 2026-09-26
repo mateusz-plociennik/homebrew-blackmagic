@@ -23,11 +23,12 @@ STUB_GH = <<~'SH'
     "pr diff") printf '+++ b/Casks/blackmagic-x.rb\n-  version "1.1"\n+  version "1.2"\n' ;;
     "workflow run") [[ -e "$FIXTURES/dispatch-fails-${args##*pr=}" ]] && exit 1; true ;;
     "pr comment") [[ -e "$FIXTURES/comment-fails-$3" ]] && exit 1; true ;;
+    "pr view") [[ -e "$FIXTURES/commented-$3" ]] && echo 1 || echo 0 ;;
   esac
 SH
 
 # Runs the script against `prs` (lines of "number branch sha"); returns [success?, calls made].
-def dispatch(prs, runs: [], failing: [], failing_comments: [], pr_list_fails: false)
+def dispatch(prs, runs: [], failing: [], failing_comments: [], commented: [], pr_list_fails: false)
   Dir.mktmpdir do |dir|
     File.write("#{dir}/gh", STUB_GH)
     File.chmod(0755, "#{dir}/gh")
@@ -35,6 +36,7 @@ def dispatch(prs, runs: [], failing: [], failing_comments: [], pr_list_fails: fa
     runs.each { |sha| File.write("#{dir}/run-#{sha}", "") }
     failing.each { |pr| File.write("#{dir}/dispatch-fails-#{pr}", "") }
     failing_comments.each { |pr| File.write("#{dir}/comment-fails-#{pr}", "") }
+    commented.each { |pr| File.write("#{dir}/commented-#{pr}", "") }
     File.write("#{dir}/pr-list-fails", "") if pr_list_fails
     env = { "PATH" => "#{dir}:#{ENV.fetch("PATH")}", "FIXTURES" => dir, "REPO" => "o/r", "TAP" => "o/t" }
     _, status = Open3.capture2e(env, SCRIPT)
@@ -54,8 +56,13 @@ check("a bump PR with no CI run on its head (left by a cancelled run) is dispatc
 end
 
 check("a run already on the PR head prevents a duplicate dispatch and comment") do
-  ok, calls = dispatch(["7 bump-blackmagic-x-1.2 aaa"], runs: ["aaa"])
+  ok, calls = dispatch(["7 bump-blackmagic-x-1.2 aaa"], runs: ["aaa"], commented: ["7"])
   ok && dispatched(calls).empty? && commented(calls).empty?
+end
+
+check("a missing comment is retried on the next run without redispatching CI") do
+  ok, calls = dispatch(["7 bump-blackmagic-x-1.2 aaa"], runs: ["aaa"])
+  ok && dispatched(calls).empty? && commented(calls) == ["7"]
 end
 
 check("non-bump PRs are ignored") do
@@ -69,7 +76,7 @@ check("a failed dispatch fails the step, skips the comment, and still dispatches
 end
 
 check("the failed dispatch is retried on the next run, without recreating the PR") do
-  ok, calls = dispatch(["7 bump-a-1 aaa", "9 bump-b-1 bbb"], runs: ["bbb"])
+  ok, calls = dispatch(["7 bump-a-1 aaa", "9 bump-b-1 bbb"], runs: ["bbb"], commented: ["9"])
   ok && dispatched(calls) == ["7"] && commented(calls) == ["7"]
 end
 
