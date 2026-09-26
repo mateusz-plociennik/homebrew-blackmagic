@@ -13,8 +13,8 @@ name: Bump casks
 
 on:
   schedule:
-    # Daily. Blackmagic ship releases irregularly, so there is no window worth targeting.
-    - cron: "17 6 * * *"
+    # Mondays and Thursdays. Blackmagic ship releases irregularly, so there is no window worth targeting.
+    - cron: "17 6 * * 1,4"
   workflow_dispatch:
     inputs:
       report-only:
@@ -34,15 +34,16 @@ permissions:
 
 jobs:
   bump:
+    # macOS: `bump-cask-pr` runs `brew audit --online`, which extracts the DMG with `hdiutil`.
     runs-on: macos-latest
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
         uses: Homebrew/actions/setup-homebrew@main
         with:
-          # This tap is private, so both the checkout and the API calls need a token. `BUMP_TOKEN` is
-          # optional: set it to a PAT if you want the bump PRs to trigger the CI workflow, which
-          # `GITHUB_TOKEN`-authored PRs deliberately do not.
+          # The token pushes bump branches and opens PRs. `BUMP_TOKEN` is optional: set it to a PAT if
+          # you want the bump PRs to trigger the CI workflow, which `GITHUB_TOKEN`-authored PRs
+          # deliberately do not.
           token: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
           brew-gh-api-token: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
           cask: true

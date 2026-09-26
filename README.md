@@ -42,9 +42,6 @@ only what a user needs.
 
 ## Install
 
-This tap is private, so `brew tap` needs your GitHub credentials (SSH key or a credential helper
-configured for HTTPS).
-
 Recent Homebrew versions refuse to load formulae, casks or commands from non-official taps until you
 explicitly trust them, so this is a two-step install:
 
@@ -141,7 +138,7 @@ download id. No HTML is parsed. Their version-pointer endpoint would be lighter 
 *product family* slug: Blackmagic Ethernet Switch shares the `videohub` slug with Blackmagic
 Videohub, so it reports the wrong product's version. `lib/bmd_catalog.rb` has the detail.
 
-Bumping the cask is automated: a daily GitHub Actions workflow runs `brew bump`, which compares each
+Bumping the cask is automated: a GitHub Actions workflow (twice a week) runs `brew bump`, which compares each
 cask's livecheck result against its pinned version and opens a pull request for anything newer —
 downloading the artifact to compute the new `sha256`. Run it on demand from the Actions tab; tick
 **report-only** to see what it would do without opening pull requests.

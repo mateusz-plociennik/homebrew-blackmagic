@@ -2,8 +2,8 @@ cask "blackmagic-atem-switchers" do
   require Tap.fetch("mateusz-plociennik/blackmagic").path/"lib/bmd_catalog"
   require Tap.fetch("mateusz-plociennik/blackmagic").path/"lib/bmd_download_strategy"
 
-  version "10.4"
-  sha256 "639e7df1ee2592bf8f5cc5576f4cfbfb9e912b5643002e92002e38d7f65948f1"
+  version "10.4.1"
+  sha256 "2d18ea6d1c1553d9eb1a2cd568c4ed08df2d41d11c62ab96635448d7917dc751"
 
   url "https://sw.blackmagicdesign.com/ATEM/v#{version}/Blackmagic_ATEM_Switchers_Macintosh_#{version}.zip",
       using: BmdDownloadStrategy,
