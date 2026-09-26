@@ -25,9 +25,9 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          issue=$(gh issue list --state open --limit 100 --search "sort:created-asc" \
-            --json number,assignees,closedByPullRequestsReferences \
-            --jq '[.[] | select((.assignees | length) == 0 and (.closedByPullRequestsReferences | length) == 0)][0].number // empty')
+          # Filtered server-side: `-linked:pr` also excludes issues with an open linked PR.
+          issue=$(gh issue list --state open --limit 1 --search "no:assignee -linked:pr sort:created-asc" \
+            --json number --jq '.[0].number // empty')
           if [[ -z "$issue" ]]; then
             echo "No free issue."
             exit 0
