@@ -74,6 +74,16 @@ end
 
 check("matches an exact symbol version") { BmdCaskGenerator.macos_symbol_for("14") == :sonoma }
 
+check("ignores trailing zero components") do
+  %w[14 14.0 14.0.0].all? { |v| BmdCaskGenerator.macos_symbol_for(v) == :sonoma } &&
+    BmdCaskGenerator.macos_symbol_for("15.0") == :sequoia
+end
+
+check("returns nil for zero-suffixed forms of the oldest supported release") do
+  oldest = BmdCaskGenerator::MACOS_SYMBOLS.keys.first
+  ["#{oldest}.0", "#{oldest}.0.0"].all? { |v| BmdCaskGenerator.macos_symbol_for(v).nil? }
+end
+
 check("rounds a version between two symbols up to the higher one") do
   BmdCaskGenerator.macos_symbol_for("14.5") == :sequoia
 end
