@@ -83,6 +83,10 @@ module BmdCatalog
   class << self
     # Delegated so the country the catalog is read from and the country a download is registered in
     # cannot disagree; `BmdConfig` owns both the default and the `BMD_TAP_COUNTRY` override.
+    #
+    # Kept as a delegate rather than having callers reach for `BmdConfig.country` because the country
+    # is a path segment on the catalog *and* resolve URLs, and both are read from here. This is the
+    # only hop — `BmdResolver` is the one caller, and nothing wraps it again.
     def country
       BmdConfig.country
     end
