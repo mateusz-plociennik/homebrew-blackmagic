@@ -1,0 +1,21 @@
+#!/bin/bash
+# Compares two `pkgutil --pkgs` snapshots. Exit 0: identical; 1: receipts appeared or disappeared;
+# 2: a snapshot is unreadable, which must never pass as an empty list.
+set -euo pipefail
+
+[ $# -eq 2 ] || { echo "usage: $0 BEFORE AFTER" >&2; exit 2; }
+for snapshot in "$@"; do
+  [ -f "$snapshot" ] && [ -r "$snapshot" ] || { echo "cannot read receipt snapshot: $snapshot" >&2; exit 2; }
+done
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+sed '/^$/d' "$1" | sort -u > "$tmp/before"
+sed '/^$/d' "$2" | sort -u > "$tmp/after"
+
+new=$(comm -13 "$tmp/before" "$tmp/after" | tr '\n' ' ')
+missing=$(comm -23 "$tmp/before" "$tmp/after" | tr '\n' ' ')
+
+[ -z "$new" ] || echo "left receipts behind: $new"
+[ -z "$missing" ] || echo "removed pre-existing receipts: $missing"
+[ -z "$new$missing" ]
