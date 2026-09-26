@@ -4,11 +4,11 @@
 require "digest"
 require "fileutils"
 require "tmpdir"
-require "json"
 require "macos_version"
 require "utils/curl"
 
 require_relative "bmd_catalog"
+require_relative "bmd_resolver"
 require_relative "bmd_terms"
 
 # Scaffolds a cask from Blackmagic's catalog, readme and artifact. See #10.
@@ -24,14 +24,7 @@ module BmdCaskGenerator
 
   README_URL_TEMPLATE = "https://www.blackmagicdesign.com/support/content/readme/%<release_id>s"
   FAMILY_HOMEPAGE_TEMPLATE = "https://www.blackmagicdesign.com/support/family/%<slug>s"
-  RESOLVE_ENDPOINT = "https://www.blackmagicdesign.com/api/register/%<country>s/download/%<id>s"
-  SITE = "https://www.blackmagicdesign.com"
   HTTP_STATUS_WRITE_OUT = format("%%%<token>s", token: "{http_code}").freeze
-
-  # Same empty override as `BmdDownloadStrategy::USER_AGENT` — the resolve endpoint 400s any UA
-  # containing "curl", which is Homebrew's default. Duplicated rather than shared because that file
-  # is the install-time trust boundary and this one is not; see the module comment above.
-  USER_AGENT = ""
 
   # Per-product `desc`/`homepage`/`token` overrides, for the handful where the derived value is wrong
   # or a real product page exists. Keyed on the catalog product name.
@@ -315,61 +308,14 @@ module BmdCaskGenerator
       result.success? && result.stdout.strip == "200"
     end
 
-    # Mints a signed download URL, same request shape as `BmdDownloadStrategy` — including the
+    # Mints a signed download URL through `BmdResolver`, the same code the install path runs — with the
     # registration fields when the release needs them, since scaffolding a registration-path cask means
-    # actually downloading its artifact, and `hasAgreedToTerms` for a gated release — which `generate`
+    # actually downloading its artifact, and `hasAgreedToTerms` for a gated release, which `generate`
     # only reaches once the config file carries the opt-in.
-    #
-    # `retries: 0` for the same reason the strategy sets it: a registration POST that Blackmagic
-    # accepted must not be replayed just because the response never arrived.
     def mint_signed_url(download_id, product: nil, registration: false, terms: false, timeout: nil)
-      endpoint = format(RESOLVE_ENDPOINT, country: BmdCatalog.country, id: download_id)
-      body = {
-        "platform" => BmdCatalog::PLATFORM,
-        "policy"   => true,
-        "country"  => BmdCatalog.country,
-        "origin"   => "www.blackmagicdesign.com",
-      }
-      body["hasAgreedToTerms"] = true if terms
-      body = if registration
-        # `product` is what marks the request as a registration rather than an anonymous download; see
-        # `BmdDownloadStrategy#request_body`.
-        body.merge("product" => product, **BmdConfig.registration_details)
-      else
-        body.merge("downloadOnly" => true)
-      end
-
-      result = Utils::Curl.curl_output(
-        "--request", "POST",
-        "--header", "Content-Type: application/json;charset=UTF-8",
-        "--header", "Accept: application/json, text/plain, */*",
-        "--header", "Origin: #{SITE}",
-        "--header", "Referer: #{SITE}/#{BmdCatalog.country}/support/",
-        "--data-raw", JSON.generate(body),
-        endpoint,
-        retries:    0,
-        user_agent: USER_AGENT,
-        timeout:
-      )
-
-      response = result.stdout.strip
-      if !result.success? || !response.start_with?("https://")
-        raise GeneratorError,
-              "Blackmagic Design refused to issue a download URL: " \
-              "#{response.presence || "(empty)"}#{registration_hint(response)}"
-      end
-
-      response
-    end
-
-    # Blackmagic answer a bad set of identity fields with a refusal that mentions registration, and
-    # their wording names nothing the user can act on. Point at the file the fields came from, exactly
-    # as `BmdDownloadStrategy#registration_hint` does at install time.
-    def registration_hint(response)
-      return "" unless response.match?(/regist/i)
-
-      "\nRegistration details come from #{BmdConfig.path} (or #{BmdConfig::ENV_PREFIX}* in the " \
-        "environment) — check that every field there is one Blackmagic would accept."
+      BmdResolver.mint_signed_url(download_id, product:, registration:, terms:, timeout:)
+    rescue BmdResolver::RefusedError => e
+      raise GeneratorError, e.message
     end
 
     def unsigned_path(signed_url)

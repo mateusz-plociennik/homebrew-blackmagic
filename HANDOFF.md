@@ -302,6 +302,24 @@ the anonymous casks only. Still unproven by anything cheap: that Blackmagic's re
 alive. `bump.yml` exercises it daily as a side effect of checksumming; a dedicated health check that
 resolves a signed URL without downloading it was considered and deferred as duplicate coverage.
 
+### The resolve POST lives in `BmdResolver` (#18)
+
+`BmdDownloadStrategy` and `BmdCaskGenerator` both make it, and it is the tap's trust boundary and its
+only unretryable request, so it is written once in `lib/bmd_resolver.rb`. Callers pass what differs
+and rescue `BmdResolver::RefusedError` to re-raise as their own error class. Verified live through
+the shared code on both paths: `Blackmagic Ethernet Switch 1.2` anonymous and `DaVinci Resolve 21.1`
+registered, each minting a real signed URL.
+
+That also settled the country delegate hops (#19): `BmdResolver` is now the only caller of
+`BmdCatalog.country`, and `BmdDownloadStrategy` no longer has one of its own.
+
+### `lib/bmd_cask_generator.rb` was not split (#19)
+
+448 lines after #18 took the resolve POST out, and shrinking rather than growing — the issue's own
+condition for splitting it. Revisit if it grows past where it was. The artifact-inspection half is
+still the least-covered part; `parse_distribution` and `parse_single_component` now have tests, and
+everything below them needs a real pkg.
+
 ## Notes for the next agent
 
 - The user is a Blackmagic Design employee; their motivation is skipping the website for official
