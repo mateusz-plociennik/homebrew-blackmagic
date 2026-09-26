@@ -28,7 +28,7 @@ The checks require Homebrew. The test files must be run with `brew ruby`
 because they load Homebrew libraries such as `utils/curl`.
 
 Neither `bin/verify` nor `ci.yml`'s `test-bot` job makes a network call. Two workflows do:
-`bump.yml` daily, and `audit-online.yml` weekly, which runs
+`bump.yml` twice a week, and `audit-online.yml` weekly, which runs
 `brew audit --cask --online` — that passes for this tap's casks, but each one
 downloads its whole artifact, which is why it is not a per-PR check. `ci.yml`'s
 `install` job is the one exception: on PRs only, it installs and uninstalls each
