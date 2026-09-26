@@ -70,6 +70,9 @@ jobs:
       - name: Run the missing-products report tests
         run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/bmd_product_report_test.rb"
 
+      - name: Run the changed-casks tests
+        run: bash "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/changed_casks_test.sh"
+
   install:
     # What the offline checks cannot prove about a new release: that its `pkg` name still matches, and
     # that `uninstall pkgutil:` removes every receipt it writes. Downloads the artifact, so PRs only.
@@ -97,12 +100,8 @@ jobs:
           PR: ${{ github.event.pull_request.number || inputs.pr }}
         run: |
           set -euo pipefail
-          # The PR's own diff, not a diff against main, so casks main changed since don't get installed.
-          # Existence check drops casks the PR deletes or renames away.
-          casks=""
-          for cask in $(gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" --name-only | sed -n 's|^Casks/\(.*\)\.rb$|\1|p'); do
-            if [ -f "$(brew --repo "$TAP")/Casks/$cask.rb" ]; then casks="$casks $cask"; fi
-          done
+          repo=$(brew --repo "$TAP")
+          casks=$("$repo/bin/changed-casks")
           echo "casks=$casks" >> "$GITHUB_OUTPUT"
 
       - name: Install and uninstall each changed cask

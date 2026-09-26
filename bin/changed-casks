@@ -1,0 +1,16 @@
+#!/bin/bash
+# Prints the casks PR $PR adds or modifies in $GITHUB_REPOSITORY, space-separated.
+set -euo pipefail
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+# The PR's own diff, not a diff against main, so casks main changed since don't get installed.
+# A standalone assignment, so a failing `gh` fails the script instead of yielding an empty list.
+files=$(gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" --name-only)
+
+casks=""
+# Existence check drops casks the PR deletes or renames away.
+for cask in $(printf '%s\n' "$files" | sed -n 's|^Casks/\(.*\)\.rb$|\1|p'); do
+  if [ -f "$root/Casks/$cask.rb" ]; then casks="$casks $cask"; fi
+done
+echo "$casks"
