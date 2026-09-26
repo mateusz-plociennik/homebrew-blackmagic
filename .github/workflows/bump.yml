@@ -34,8 +34,8 @@ permissions:
 
 jobs:
   bump:
-    # livecheck, download and sha256 are platform-independent; the macOS install check is ci.yml's.
-    runs-on: ubuntu-latest
+    # macOS: `bump-cask-pr` runs `brew audit --online`, which extracts the DMG with `hdiutil`.
+    runs-on: macos-latest
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
@@ -52,8 +52,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ steps.set-up-homebrew.outputs.gems-path }}
-          key: ubuntu-latest-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
-          restore-keys: ubuntu-latest-rubygems-
+          key: macos-latest-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
+          restore-keys: macos-latest-rubygems-
 
       - name: Trust the tap
         # Loading a cask from this tap runs its custom download strategy, which Homebrew refuses to do
