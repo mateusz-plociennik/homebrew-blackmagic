@@ -15,6 +15,7 @@ require "json"
 require_relative "../lib/bmd_catalog"
 require_relative "../lib/bmd_config"
 require_relative "../lib/bmd_download_strategy"
+require_relative "../lib/bmd_resolver"
 require_relative "../lib/bmd_terms"
 require_relative "support"
 
@@ -206,14 +207,14 @@ puts "\nthe guard in _fetch"
 # without consent, and an over-eager one refuses a release the user already agreed to.
 #
 # `mac_release` and `_curl_download` are stubbed — the first curls the catalog, the second the
-# artifact — and `mint_signed_url` is replaced by a recorder, so what reaches Blackmagic is inspected
-# rather than sent.
+# artifact — and `BmdResolver.mint_signed_url` is replaced by a recorder, so what reaches Blackmagic
+# is inspected rather than sent.
 def fetch_attempt(release, terms_accepted)
   recorded = {}
   strategy = BmdDownloadStrategy.new(
     "https://example.invalid/Test_1.0.zip", "test", "1.0", data: { "product" => "Test" }
   )
-  strategy.define_singleton_method(:mint_signed_url) do |id, registration:, terms: false, **|
+  BmdResolver.define_singleton_method(:mint_signed_url) do |id, registration:, terms: false, **|
     recorded.merge!(id:, registration:, terms:)
     "https://sw.blackmagicdesign.com/signed"
   end
@@ -251,19 +252,12 @@ puts "\nwhat the resolve request asserts"
 # Blackmagic's own modal sends `hasAgreedToTerms` from the checkbox on a gated release; the tap sends
 # it from the config file, and only there. Asserting it for a release with no terms would be claiming
 # agreement to a document that does not exist.
-def body_for(terms:, registration: false)
-  strategy = BmdDownloadStrategy.new(
-    "https://example.invalid/Test_1.0.zip", "test", "1.0", data: { "product" => "Test" }
-  )
-  strategy.send(:request_body, registration:, terms:)
-end
-
 check("asserts agreement to Blackmagic for a gated release") do
-  body_for(terms: true)["hasAgreedToTerms"] == true
+  BmdResolver.request_body(product: "Test", terms: true)["hasAgreedToTerms"] == true
 end
 
 check("asserts nothing about terms for an ungated release") do
-  body_for(terms: false).exclude?("hasAgreedToTerms")
+  BmdResolver.request_body(product: "Test", terms: false).exclude?("hasAgreedToTerms")
 end
 
 report_failures!
