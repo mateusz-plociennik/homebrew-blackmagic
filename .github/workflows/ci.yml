@@ -70,6 +70,9 @@ jobs:
       - name: Run the missing-products report tests
         run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/bmd_product_report_test.rb"
 
+      - name: Run the receipt comparison tests
+        run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/compare_receipts_test.rb"
+
   install:
     # What the offline checks cannot prove about a new release: that its `pkg` name still matches, and
     # that `uninstall pkgutil:` removes every receipt it writes. Downloads the artifact, so PRs only.
@@ -110,9 +113,13 @@ jobs:
         env:
           TAP: ${{ steps.set-up-homebrew.outputs.tap-name }}
           CASKS: ${{ steps.changed.outputs.casks }}
+        # Receipt equality does not prove shared payload survived: pkgutil removes files a neighbour's
+        # receipt also claims (see HANDOFF.md, DaVinci Resolve). Shared components need targeted checks.
         run: |
-          set -eu
+          set -euo pipefail
           [ -n "$CASKS" ] || { echo "No casks changed"; exit 0; }
+          compare="$(brew --repo "$TAP")/bin/compare-receipts"
+          snapshots=$(mktemp -d)
 
           failed=""
           for cask in $CASKS; do
@@ -120,11 +127,12 @@ jobs:
               *" $cask "*) echo "::notice::Skipping $cask: registration-gated, install it locally"; continue ;;
             esac
             echo "::group::$cask"
-            before=$(pkgutil --pkgs | sort)
+            # Outside any `if`, so a failing pkgutil stops the step instead of reading as no receipts.
+            pkgutil --pkgs > "$snapshots/before"
             if brew install --cask "$TAP/$cask" && brew uninstall --cask "$TAP/$cask"; then
-              left=$(comm -13 <(echo "$before") <(pkgutil --pkgs | sort))
-              if [ -n "$left" ]; then
-                echo "::error::$cask left receipts behind: ${left//$'\n'/ }"
+              pkgutil --pkgs > "$snapshots/after"
+              if ! diff=$("$compare" "$snapshots/before" "$snapshots/after"); then
+                echo "::error::$cask ${diff//$'\n'/; }"
                 failed="$failed $cask"
               fi
             else

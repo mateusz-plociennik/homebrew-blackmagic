@@ -300,7 +300,10 @@ Switch, multiple GB for Resolve), and registration-path casks need a config file
 That is why per-PR CI audits with `--only-tap-syntax` and the online audit is a manual/weekly job over
 the anonymous casks only. (#25 did add a per-PR download: a real install + uninstall of each cask the
 PR changes, which is what proves a bumped release kept its pkg name and receipts. Bump PRs get it by
-`bump.yml` dispatching `ci.yml`, since `GITHUB_TOKEN`-authored PRs fire no `pull_request` run.)
+`bump.yml` dispatching `ci.yml`, since `GITHUB_TOKEN`-authored PRs fire no `pull_request` run.
+`bin/compare-receipts` fails the job on receipts left behind *and* on pre-existing receipts removed,
+#30. Neither proves shared payload files survived — see the Resolve notes above — and a fresh runner
+has no co-installed products to lose, so shared components still need targeted coexistence checks.)
 Still unproven by anything cheap: that Blackmagic's resolve endpoint is
 alive. `bump.yml` exercises it daily as a side effect of checksumming; a dedicated health check that
 resolves a signed URL without downloading it was considered and deferred as duplicate coverage.
