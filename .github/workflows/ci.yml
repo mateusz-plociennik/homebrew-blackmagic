@@ -1,9 +1,8 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - main
+  # No `push` on main: every change lands via a PR that already ran this, and direct pushes are
+  # gated by `.githooks/pre-commit` running `bin/verify`.
   pull_request:
   # `bump.yml` dispatches this for each bump PR it opens: a PR authored by `GITHUB_TOKEN` fires no
   # `pull_request` run, but `workflow_dispatch` is exempt from that rule.
@@ -24,22 +23,21 @@ permissions:
 
 jobs:
   test-bot:
-    runs-on: macos-latest
+    # Style, offline audit and pure-Ruby tests: nothing here needs macOS.
+    runs-on: ubuntu-latest
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
         uses: Homebrew/actions/setup-homebrew@main
         with:
-          # This tap is private, so the action needs a token to check it out.
-          token: ${{ secrets.GITHUB_TOKEN }}
           cask: true
 
       - name: Cache Homebrew Bundler RubyGems
         uses: actions/cache@v4
         with:
           path: ${{ steps.set-up-homebrew.outputs.gems-path }}
-          key: macos-latest-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
-          restore-keys: macos-latest-rubygems-
+          key: ubuntu-latest-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
+          restore-keys: ubuntu-latest-rubygems-
 
       - name: Run brew test-bot --only-cleanup-before
         run: brew test-bot --only-cleanup-before
@@ -89,7 +87,6 @@ jobs:
         id: set-up-homebrew
         uses: Homebrew/actions/setup-homebrew@main
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
           cask: true
 
       - name: Trust the tap

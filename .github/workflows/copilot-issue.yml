@@ -1,0 +1,36 @@
+name: Assign next issue to Copilot
+
+# Hands the oldest open issue that nobody is on (no assignee, no linked PR) to the Copilot coding
+# agent, which works on it and opens the PR itself.
+
+on:
+  schedule:
+    - cron: "43 7 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  assign:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assign oldest free issue
+        env:
+          # GITHUB_TOKEN cannot assign Copilot; needs a user PAT with Issues read/write on this repo.
+          GH_TOKEN: ${{ secrets.COPILOT_ASSIGN_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Filtered server-side: `-linked:pr` also excludes issues with an open linked PR.
+          issue=$(gh issue list --state open --limit 1 --search "no:assignee -linked:pr sort:created-asc" \
+            --json number --jq '.[0].number // empty')
+          if [[ -z "$issue" ]]; then
+            echo "No free issue."
+            exit 0
+          fi
+          gh issue edit "$issue" --add-assignee "@copilot"
+          echo "Assigned #$issue to Copilot." >> "$GITHUB_STEP_SUMMARY"

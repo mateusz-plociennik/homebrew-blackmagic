@@ -13,8 +13,8 @@ cask "blackmagic-ethernet-switch" do
   require Tap.fetch("mateusz-plociennik/blackmagic").path/"lib/bmd_catalog"
   require Tap.fetch("mateusz-plociennik/blackmagic").path/"lib/bmd_download_strategy"
 
-  version "1.2"
-  sha256 "a34c37122939e82b60e08afd0d442fbc5d48bf034d107c36eec6663e3c3069fb"
+  version "2.0"
+  sha256 "14f71675c1fd00dcd4743527227ebc15eb092b4a379c3d562549b45ae4c23759"
 
   # Never fetched directly — this unsigned path 404s. BmdDownloadStrategy mints a signed URL at
   # fetch time; this stable string is what Homebrew keys its download cache on.

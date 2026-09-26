@@ -1,7 +1,7 @@
 # Handoff — Blackmagic Design Homebrew tap
 
 Status: **built and in use.** Five casks in `Casks/`, the shared strategy and helpers in `lib/`,
-`bin/generate-cask` for scaffolding, and three workflows: per-PR `ci.yml`, daily `bump.yml`, weekly
+`bin/generate-cask` for scaffolding, and three workflows: per-PR `ci.yml`, twice-weekly `bump.yml`, weekly
 `audit-online.yml`. Ethernet Switch and Resolve are install-verified (below); the other casks have no
 recorded install.
 
@@ -265,7 +265,7 @@ Still open: `conflicts_with` between free Resolve and Studio, once a Studio cask
 - ~~Catalog scraper emitting `brew bump-cask-pr`.~~ **Built in #5, and there is no scraper.**
   `brew bump --cask --tap … --open-pr --no-fork` already does every part of it: runs livecheck (which
   reads the catalog), diffs against the pinned version, checks GitHub for an existing bump PR, and
-  calls `bump-cask-pr` to download, checksum and open. `.github/workflows/bump.yml` runs it daily.
+  calls `bump-cask-pr` to download, checksum and open. `.github/workflows/bump.yml` runs it twice a week.
   Since #8, `--version` is sufficient — the downloadId follows from the version.
 - ~~The 223 `requiresTermsAndConditions` products.~~ **Built in #6.** `_fetch` refuses a release whose
   catalog entry sets the flag unless the config file carries `"agreeToTerms": true`.
@@ -318,7 +318,7 @@ step — every day. Recover by hand: close the PR and delete the branch (the nex
 from current `main`), or merge `main` into the branch, which also fires a `pull_request` run if a
 human pushes it.
 Still unproven by anything cheap: that Blackmagic's resolve endpoint is
-alive. `bump.yml` exercises it daily as a side effect of checksumming; a dedicated health check that
+alive. `bump.yml` exercises it twice a week as a side effect of checksumming; a dedicated health check that
 resolves a signed URL without downloading it was considered and deferred as duplicate coverage.
 
 ### The resolve POST lives in `BmdResolver` (#18)
