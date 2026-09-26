@@ -86,14 +86,14 @@ end
 puts "\nstale_skip_entries"
 
 check("flags a skip entry whose reason names a now-closed issue") do
-  entries = BmdProductReport.stale_skip_entries(Set[6]) # #6 open; everything else closed
+  entries = BmdProductReport.stale_skip_entries(Set[12]) # #12 open; everything else closed
   flagged = BmdProductReport.stale_skip_entries(Set.new) # nothing open
   entries.none? { |e| e.start_with?("Blackmagic eGPU") } &&
-    flagged.any? { |e| e.start_with?("Blackmagic RAW:") }
+    flagged.any? { |e| e.start_with?("Blackmagic Camera:") }
 end
 
 check("does not flag a skip entry whose issue is still open") do
-  BmdProductReport.stale_skip_entries(Set[6]).none? { |e| e.start_with?("Blackmagic RAW:") }
+  BmdProductReport.stale_skip_entries(Set[12]).none? { |e| e.start_with?("Blackmagic Camera:") }
 end
 
 # Entries that name no issue at all are never stale — which is why the registration-path products

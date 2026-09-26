@@ -7,10 +7,11 @@
 # `brew install`. The `sig` below is kept because sorbet-runtime does enforce it on every call.
 
 require "download_strategy"
-require "json"
 
 require_relative "bmd_catalog"
 require_relative "bmd_config"
+require_relative "bmd_resolver"
+require_relative "bmd_terms"
 
 # Downloads Blackmagic Design installers.
 #
@@ -44,16 +45,6 @@ require_relative "bmd_config"
 # Casks state neither, so a release that changes flag upstream changes behaviour here without a cask
 # edit — and casks on the anonymous path stay installable with no configuration at all.
 class BmdDownloadStrategy < CurlDownloadStrategy
-  RESOLVE_ENDPOINT = "https://www.blackmagicdesign.com/api/register/%<country>s/download/%<id>s"
-  SITE = "https://www.blackmagicdesign.com"
-
-  # Blackmagic's resolve endpoint answers `400 Bad Request` to any request whose User-Agent contains
-  # the substring "curl" — a filter on the name alone, not on the client. Homebrew's default User-Agent
-  # ends in `curl/8.7.1`, so leaving it in place fails every fetch with a bare "Bad Request" that
-  # looks like throttling or a malformed body. Sending no User-Agent at all is accepted. Only the
-  # resolve POST is affected; the artifact host (`sw.blackmagicdesign.com`) does not filter.
-  USER_AGENT = ""
-
   sig { params(url: String, name: String, version: T.untyped, meta: T.untyped).void }
   def initialize(url, name, version, **meta)
     super
@@ -71,117 +62,48 @@ class BmdDownloadStrategy < CurlDownloadStrategy
   # The trailing `nil`s are last-modified and content-length, which Homebrew only uses for cache
   # freshness heuristics — the pinned `sha256` is the real integrity check.
   #
-  # This is also why `brew audit --cask --online` cannot pass for casks using this strategy: there is
-  # no URL for it to validate. Do not "fix" this override to restore the probe.
+  # Do not "fix" this override to restore the probe. It is load-bearing for the cache key, not for
+  # audit: `brew audit --cask --online` passes for casks using this strategy, because
+  # `Cask::Audit#audit_url_https_availability` returns early for any `url` with a `using:` strategy,
+  # so the unsigned path is never validated. Its `audit_download` step then fetches through `_fetch`,
+  # which mints a real signed URL — meaning an online audit downloads the whole artifact.
   def resolve_url_basename_time_file_size(url, timeout: nil)
     [url, parse_basename(url), nil, nil, nil, false]
   end
 
   def _fetch(url:, resolved_url:, timeout:)
     release = BmdCatalog.mac_release(@product, version.to_s, timeout:)
-    refuse_terms!(release) if BmdCatalog.requires_terms?(release)
+    terms = BmdCatalog.requires_terms?(release)
+    refuse_terms!(release, timeout:) if terms && !BmdConfig.accepts_terms?
     registration = BmdCatalog.requires_registration?(release)
 
-    signed_url = mint_signed_url(BmdCatalog.download_id_for(release), registration:, timeout:)
-    ohai "Minted a signed URL from #{SITE}" unless quiet?
+    signed_url = BmdResolver.mint_signed_url(BmdCatalog.download_id_for(release), product: @product,
+                                             registration:, terms:, timeout:)
+    ohai "Minted a signed URL from #{BmdResolver::SITE}" unless quiet?
     _curl_download signed_url, temporary_path, timeout
+  rescue BmdResolver::RefusedError => e
+    raise CurlDownloadStrategyError.new(e.endpoint, e.message)
   end
 
-  # Some releases require accepting a licence agreement, which the tap will not do on the user's
-  # behalf: the terms live in the catalog entry and nothing here can show them and take an informed
-  # opt-in from inside a download strategy. Refusing before any bytes move is the honest outcome; #6
-  # is where that gets designed. The check reads upstream's flag rather than a cask attribute, so a
-  # release that gains terms after its cask was written stops working instead of silently agreeing.
-  def refuse_terms!(release)
-    raise CurlDownloadStrategyError.new(SITE, <<~MESSAGE)
-      "#{release["name"]}" requires accepting Blackmagic Design's licence terms, and this tap does not
-      accept licence terms on your behalf — see issue #6. Download it from
-      #{SITE}/support/ instead. Nothing has been downloaded.
-    MESSAGE
-  end
-
-  # Ask Blackmagic for a signed URL. Returns it as a bare string — the endpoint answers with the URL
-  # as its plain-text body, not JSON.
+  # Some releases require accepting a licence agreement. If the user has granted explicit opt-in
+  # in their config, we proceed; otherwise we refuse before any bytes move, displaying the agreement
+  # itself and the exact config change needed. The check reads upstream's flag rather than a cask
+  # attribute, so a release that gains terms after its cask was written stops working instead of
+  # silently agreeing.
   #
-  # `retries: 0` is deliberate: this POST registers a download, so it must not be replayed
-  # automatically. `user_agent:` overrides Homebrew's default for the reason given at `USER_AGENT`.
-  def mint_signed_url(download_id, registration:, timeout: nil)
-    endpoint = format(RESOLVE_ENDPOINT, country:, id: download_id)
-    body = request_body(registration:)
+  # The catalog entry names the agreement rather than carrying it, so the text is fetched — see
+  # `BmdTerms`. If that fetch fails, `BmdTerms` raises and the install stops there: still a refusal,
+  # which is the safe direction, and never a demand to agree to a document we could not show.
+  def refuse_terms!(release, timeout: nil)
+    terms_text = BmdTerms.text(release["termsAndConditions"], timeout:)
 
-    result = curl_output(
-      "--request", "POST",
-      "--header", "Content-Type: application/json;charset=UTF-8",
-      "--header", "Accept: application/json, text/plain, */*",
-      "--header", "Origin: #{SITE}",
-      "--header", "Referer: #{SITE}/#{country}/support/",
-      "--data-raw", JSON.generate(body),
-      endpoint,
-      retries:    0,
-      user_agent: USER_AGENT,
-      timeout:
-    )
+    message = "\"#{release["name"]}\" requires accepting Blackmagic Design's licence agreement.\n\n"
+    message << "#{terms_text}\n\n"
+    message << "(#{BmdTerms.url(release["termsAndConditions"])})\n\n"
+    message << "If you agree to it, record that in #{BmdConfig.path}:\n\n"
+    message << "{ \"agreeToTerms\": true }\n\n"
+    message << "Nothing has been downloaded."
 
-    response = result.stdout.strip
-    resolved = result.success? && response.start_with?("https://")
-
-    unless resolved
-      raise CurlDownloadStrategyError.new(endpoint, <<~MESSAGE)
-        Blackmagic Design refused to issue a download URL. Their response was:
-          #{response.presence || "(empty, curl exited #{result.status.exitstatus})"}
-        #{registration_hint(response)}
-        This request is not retried automatically.
-      MESSAGE
-    end
-
-    response
-  end
-
-  # A refusal that mentions registration is about the identity fields, not about the download — either
-  # the details in the config file are not ones Blackmagic accept, or upstream started requiring
-  # registration for a release their catalog still flags as anonymous (in which case the flag, and so
-  # the body, was read before this request — nothing to fix in the cask). Naming the file is the one
-  # thing that turns Blackmagic's own wording into something actionable.
-  def registration_hint(response)
-    return "" unless response.match?(/regist/i)
-
-    <<~HINT
-
-      Blackmagic want registration details for this download. They come from
-      #{BmdConfig.path}
-      (or #{BmdConfig::ENV_PREFIX}* in the environment) — check that every field there is one they
-      would accept, and that the email and phone are real.
-    HINT
-  end
-
-  # The two bodies Blackmagic's own download modal posts, which are the two this sends.
-  #
-  # Common to both: `platform`, `policy`, `origin`, and `country` — mandatory even though the country
-  # also appears in the path; omitting it is a 400.
-  #
-  # What actually discriminates them is `product`, not the identity fields and not `downloadOnly`:
-  # their "Download only" button sets `downloadOnly` and sends no `product`, while their registration
-  # form sends the product and no `downloadOnly` (`SupportModalDownloadStartCtrl` in
-  # `support-bundle.js`). The endpoint reads it the same way — a registration-gated release answers
-  # `403 Must register …` to a body with a full set of identity fields but no `product`, and issues a
-  # signed URL for the same body with one. So `product` is what marks a request as a registration
-  # rather than an anonymous download, and it must be non-empty.
-  #
-  # Nothing here asserts agreement to anything: `_fetch` refuses `requiresTermsAndConditions`
-  # releases outright, and the endpoint wants no terms flag for the rest.
-  def request_body(registration:)
-    body = {
-      "platform" => BmdCatalog::PLATFORM,
-      "policy"   => true,
-      "country"  => country,
-      "origin"   => "www.blackmagicdesign.com",
-    }
-    return body.merge("downloadOnly" => true) unless registration
-
-    body.merge("product" => @product, **BmdConfig.registration_details)
-  end
-
-  def country
-    BmdCatalog.country
+    raise CurlDownloadStrategyError.new(BmdResolver::SITE, message)
   end
 end

@@ -96,8 +96,11 @@ the chosen related product (or the release name) and never sets `downloadOnly`. 
 against a registration-gated release, a body carrying every identity field but no `product` is still
 `403 Must register to be able to perform the download`, and the same body with a non-empty `product`
 returns a signed URL. An empty-string `product` is a 403 too. `downloadOnly` makes no difference
-either way, and no terms flag is wanted — `hasAgreedToTerms` was in the earlier table but is not
-required for a `requiresTermsAndConditions: false` release, so the tap sends nothing of the kind.
+either way. `hasAgreedToTerms` was in the earlier table but is not required for a
+`requiresTermsAndConditions: false` release, so the tap sends it only on a *gated* one, and only once
+the config file carries `"agreeToTerms": true` — which is the same field Blackmagic's own modal sends
+from its checkbox (`supportFormDetails` seeds `formData.hasAgreedToTerms = false` whenever the release
+has terms, and `onFormSubmission` refuses to submit until it is true).
 The value passed is the cask's own product name (`"DaVinci Resolve"`), which the endpoint accepts.
 
 An anonymous body against a registration-required item → `403 Must register to be able to perform the
@@ -257,9 +260,68 @@ Still open: `conflicts_with` between free Resolve and Studio, once a Studio cask
   reads the catalog), diffs against the pinned version, checks GitHub for an existing bump PR, and
   calls `bump-cask-pr` to download, checksum and open. `.github/workflows/bump.yml` runs it daily.
   Since #8, `--version` is sufficient — the downloadId follows from the version.
-- The 223 `requiresTermsAndConditions` products. A cask that programmatically accepts a licence on
-  the user's behalf must display the terms (present in the catalog JSON as `termsAndConditions`) and
-  require an explicit opt-in in the config. Do not design this until a T&C product is actually in scope.
+- ~~The 223 `requiresTermsAndConditions` products.~~ **Built in #6.** `_fetch` refuses a release whose
+  catalog entry sets the flag unless the config file carries `"agreeToTerms": true`.
+  `BmdConfig.accepts_terms?` reads the file only — no environment variable — so acceptance cannot ride
+  along on one `brew install` invocation.
+
+  The note above (and the issue) said the terms text is in the catalog as `termsAndConditions`. It is
+  not: that field is a *slug* naming a licence document (`"bmd-braw-sdk-2"`), and six slugs cover all
+  224 gated macOS releases. The text comes from the modal Blackmagic's own download button opens,
+  `/support/modal/download-with-terms-start/<slug>`, which their `support-bundle.js` builds and
+  renders as step 2 of the download form; every `/api/…/terms…` shape 404s. `BmdTerms` fetches that
+  fragment and lifts the agreement out of its `<div class="tandc">`. If it cannot, it raises — the
+  install still stops, and the tap never asks anyone to agree to a document it could not show them.
+
+  Acceptance is also *sent*, not just checked locally: a gated release's resolve POST carries
+  `hasAgreedToTerms: true`, the field their own checkbox sets, so the assertion Blackmagic receive is
+  the one the user wrote in their config file. `bin/generate-cask` gates on the same key, since
+  scaffolding downloads the artifact.
+
+  No cask in the tap exercises this yet, because the two eligible products (`Blackmagic RAW`,
+  `Blackmagic Fairlight Sound Library`) are also registration-gated, and bootstrapping either means
+  downloading the artifact, which means someone accepting their licence first. Verified live instead:
+  `BmdCatalog.mac_release("Blackmagic RAW", "5.1")` → flag set, slug `bmd-braw-sdk-2`, refusal
+  carrying all 22.6 KB of the real agreement.
+
+### `brew audit --cask --online` (#7 — the constraint that turned out not to exist)
+
+The comment that used to sit on `resolve_url_basename_time_file_size` claimed an online audit can
+never pass here. It can, and does — verified by running it against `blackmagic-ethernet-switch`:
+
+- `Cask::Audit#audit_url_https_availability` returns early for any `url` with a `using:` strategy, so
+  the deliberately-404ing unsigned path is never probed.
+- `audit_download` then fetches through `BmdDownloadStrategy#_fetch`, which mints a real signed URL.
+
+The override is still load-bearing — for the download cache key, not for audit. Do not remove it.
+
+The catch is `audit_download`: online audit downloads the whole artifact (~350 MB for Ethernet
+Switch, multiple GB for Resolve), and registration-path casks need a config file CI does not have.
+That is why per-PR CI audits with `--only-tap-syntax` and the online audit is a manual/weekly job over
+the anonymous casks only. (#25 did add a per-PR download: a real install + uninstall of each cask the
+PR changes, which is what proves a bumped release kept its pkg name and receipts. Bump PRs get it by
+`bump.yml` dispatching `ci.yml`, since `GITHUB_TOKEN`-authored PRs fire no `pull_request` run.)
+Still unproven by anything cheap: that Blackmagic's resolve endpoint is
+alive. `bump.yml` exercises it daily as a side effect of checksumming; a dedicated health check that
+resolves a signed URL without downloading it was considered and deferred as duplicate coverage.
+
+### The resolve POST lives in `BmdResolver` (#18)
+
+`BmdDownloadStrategy` and `BmdCaskGenerator` both make it, and it is the tap's trust boundary and its
+only unretryable request, so it is written once in `lib/bmd_resolver.rb`. Callers pass what differs
+and rescue `BmdResolver::RefusedError` to re-raise as their own error class. Verified live through
+the shared code on both paths: `Blackmagic Ethernet Switch 1.2` anonymous and `DaVinci Resolve 21.1`
+registered, each minting a real signed URL.
+
+That also settled the country delegate hops (#19): `BmdResolver` is now the only caller of
+`BmdCatalog.country`, and `BmdDownloadStrategy` no longer has one of its own.
+
+### `lib/bmd_cask_generator.rb` was not split (#19)
+
+448 lines after #18 took the resolve POST out, and shrinking rather than growing — the issue's own
+condition for splitting it. Revisit if it grows past where it was. The artifact-inspection half is
+still the least-covered part; `parse_distribution` and `parse_single_component` now have tests, and
+everything below them needs a real pkg.
 
 ## Notes for the next agent
 

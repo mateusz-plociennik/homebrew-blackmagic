@@ -18,7 +18,7 @@ cask "blackmagic-video-assist" do
     strategy :json, &BmdCatalog::MAC_RELEASES
   end
 
-  depends_on macos: :big_sur
+  depends_on :macos
 
   pkg "Install Video Assist #{version}.pkg"
 
