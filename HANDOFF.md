@@ -297,8 +297,11 @@ The override is still load-bearing — for the download cache key, not for audit
 
 The catch is `audit_download`: online audit downloads the whole artifact (~350 MB for Ethernet
 Switch, multiple GB for Resolve), and registration-path casks need a config file CI does not have.
-That is why per-PR CI stays on `--only-tap-syntax` and the online audit is a manual/weekly job over
-the anonymous casks only. Still unproven by anything cheap: that Blackmagic's resolve endpoint is
+That is why per-PR CI audits with `--only-tap-syntax` and the online audit is a manual/weekly job over
+the anonymous casks only. (#25 did add a per-PR download: a real install + uninstall of each cask the
+PR changes, which is what proves a bumped release kept its pkg name and receipts. Bump PRs get it by
+`bump.yml` dispatching `ci.yml`, since `GITHUB_TOKEN`-authored PRs fire no `pull_request` run.)
+Still unproven by anything cheap: that Blackmagic's resolve endpoint is
 alive. `bump.yml` exercises it daily as a side effect of checksumming; a dedicated health check that
 resolves a signed URL without downloading it was considered and deferred as duplicate coverage.
 
