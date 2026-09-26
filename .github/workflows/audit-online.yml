@@ -42,22 +42,20 @@ env:
 
 jobs:
   audit:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
         uses: Homebrew/actions/setup-homebrew@main
         with:
-          # This tap is private, so the action needs a token to check it out.
-          token: ${{ secrets.GITHUB_TOKEN }}
           cask: true
 
       - name: Cache Homebrew Bundler RubyGems
         uses: actions/cache@v4
         with:
           path: ${{ steps.set-up-homebrew.outputs.gems-path }}
-          key: macos-latest-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
-          restore-keys: macos-latest-rubygems-
+          key: ubuntu-latest-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
+          restore-keys: ubuntu-latest-rubygems-
 
       - name: Trust the tap
         # An online audit fetches, and fetching runs this tap's custom download strategy, which
