@@ -12,3 +12,4 @@ brew ruby test/bmd_terms_test.rb
 brew ruby test/bmd_cask_generator_test.rb
 brew ruby test/bmd_product_report_test.rb
 brew ruby test/compare_receipts_test.rb
+brew ruby test/dispatch_bump_ci_test.rb

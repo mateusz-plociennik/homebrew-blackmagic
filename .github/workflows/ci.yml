@@ -73,6 +73,9 @@ jobs:
       - name: Run the receipt comparison tests
         run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/compare_receipts_test.rb"
 
+      - name: Run the bump CI dispatch tests
+        run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/dispatch_bump_ci_test.rb"
+
   install:
     # What the offline checks cannot prove about a new release: that its `pkg` name still matches, and
     # that `uninstall pkgutil:` removes every receipt it writes. Downloads the artifact, so PRs only.

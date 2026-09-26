@@ -311,6 +311,12 @@ PR changes, which is what proves a bumped release kept its pkg name and receipts
 `bin/compare-receipts` fails the job on receipts left behind *and* on pre-existing receipts removed,
 #30. Neither proves shared payload files survived — see the Resolve notes above — and a fresh runner
 has no co-installed products to lose, so shared components still need targeted coexistence checks.)
+Since #28 `bin/dispatch-bump-ci` dispatches `ci.yml` for every open `bump-*` PR whose head commit has no
+run, so a PR left by a cancelled run or a failed dispatch gets CI on the next daily run. A bump branch
+cut before #25 has a `ci.yml` without `workflow_dispatch`, so its dispatch fails — and fails the bump
+step — every day. Recover by hand: close the PR and delete the branch (the next bump run reopens it
+from current `main`), or merge `main` into the branch, which also fires a `pull_request` run if a
+human pushes it.
 Still unproven by anything cheap: that Blackmagic's resolve endpoint is
 alive. `bump.yml` exercises it daily as a side effect of checksumming; a dedicated health check that
 resolves a signed URL without downloading it was considered and deferred as duplicate coverage.
