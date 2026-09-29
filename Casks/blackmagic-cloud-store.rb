@@ -2,8 +2,8 @@ cask "blackmagic-cloud-store" do
   require Tap.fetch("mateusz-plociennik/blackmagic").path/"lib/bmd_catalog"
   require Tap.fetch("mateusz-plociennik/blackmagic").path/"lib/bmd_download_strategy"
 
-  version "2.0"
-  sha256 "352f7621f5641eb5e800d263dc0f39c3d84d2741b13bd1426bc15e5c935c3554"
+  version "2.1"
+  sha256 "d3e7b552b7b11e3b485d2fc5541787e9e395754eb104673ac933b71b4083f4ac"
 
   url "https://sw.blackmagicdesign.com/CloudStore/v#{version}/Blackmagic_Cloud_Store_Macintosh_#{version}.zip",
       using: BmdDownloadStrategy,
