@@ -1,9 +1,9 @@
 # Handoff — Blackmagic Design Homebrew tap
 
-Status: **built and in use.** Five casks in `Casks/`, the shared strategy and helpers in `lib/`,
+Status: **built and in use.** Sixteen casks in `Casks/`, the shared strategy and helpers in `lib/`,
 `bin/generate-cask` for scaffolding, and three workflows: per-PR `ci.yml`, twice-weekly `bump.yml`, weekly
-`audit-online.yml`. Ethernet Switch and Resolve are install-verified (below); the other casks have no
-recorded install.
+`audit-online.yml`. All sixteen products have recorded install/uninstall verification; the eleven
+coverage additions passed local verification on 2026-10-07, as recorded below.
 
 Next steps: the open GitHub issues. Sections below are dated by the issue that settled them; where a
 later issue reversed an earlier plan, the earlier text is struck through or marked superseded.
@@ -215,6 +215,88 @@ Chosen because it takes the anonymous path (no PII) and the artifact is already 
 Install-verified in `6e7f808`: fetch matches the pinned `sha256`, install completes, uninstall
 forgets all three receipts. Two corrections from that run: the uninstall stanza is a regex, so it is
 `EthernetSwitch.*`, not `EthernetSwitch*`; and the pkg's 10.14 minimum has no Homebrew symbol.
+
+## Coverage install/uninstall verification (2026-10-07)
+
+User-authorised local tests on **macOS 26.7.1, arm64**, with Homebrew 7.0.8. All eleven additions
+matched their pinned checksums and current stable livechecks, installed successfully, and uninstalled
+successfully. Each round trip passed `bin/compare-receipts` and a check that its product-owned receipt
+files were gone; app casks were checked for removal of the whole destination bundle.
+
+| Cask | Version | Issue | Install/uninstall |
+|---|---|---|---|
+| `blackmagic-audio-monitor` | 4.0.4 | #44 | Passed |
+| `blackmagic-camera` | 10.3 | #45 | Passed |
+| `blackmagic-camera-prodock` | 1.1.1 | #46 | Passed |
+| `blackmagic-cintel` | 7.0 | #47 | Passed |
+| `blackmagic-converters` | 12.4 | #48 | Passed |
+| `blackmagic-duplicator` | 1.2 | #49 | Passed |
+| `blackmagic-multiview` | 2.2.5 | #51 | Passed |
+| `blackmagic-raw-player` | 1.4 | #53 | Passed |
+| `blackmagic-raw-speed-test` | 1.4 | #54 | Passed |
+| `blackmagic-streaming` | 4.2.4 | #55 | Passed |
+| `blackmagic-videohub` | 11.0.1 | #56 | Passed |
+
+The existing Homebrew tap was a separate checkout with an unresolved generator conflict. It was left
+untouched. A temporary local tap, `mateusz-plociennik/blackmagic-verification`, pointed to this checkout;
+its shared catalog/download helpers matched those in the installed tap. Actual commands were:
+
+```sh
+brew install --cask mateusz-plociennik/blackmagic-verification/<token>
+brew uninstall --cask <token>
+bin/compare-receipts before after
+bin/verify
+brew test-bot --only-tap-syntax --tap=mateusz-plociennik/blackmagic-verification
+```
+
+The explicit `--tap` syntax check matters: `test-bot --only-tap-syntax` without it defaults to the
+core tap on this Homebrew version. Both that explicit tap check and every repository test passed.
+Coverage issues remain open until their PR/merge and parent-tracker gates are satisfied. #50 and #52
+remain deferred for registration and personal licence acceptance.
+
+### Vendor uninstall behavior
+
+The nine new package-backed casks now invoke the scripts shipped in their staged vendor Uninstall
+apps, then clean up remaining product receipts. The user explicitly chose full vendor bundles and
+native uninstall behavior, accepting that shared components can be removed. This supersedes the
+new casks' initial policy of leaving bundled RAW/Desktop Video components behind.
+
+Current two-way-door choice: **follow vendor uninstallers**. Flip later by changing the named
+uninstall stanzas; no package metadata or download changes are needed.
+
+| Cask | Vendor uninstaller removes | Agent recommendation | Current risk | Recommendation risk | Flip |
+|---|---|---|---|---|---|
+| `blackmagic-camera` | Camera payload plus bundled RAW SDK/docs, NLE plug-ins and camera datapacks; RAW player apps only when the script's Resolve check keeps them. | Leave shared RAW components unless a reference-aware cleanup proves no other cask needs them. | Can remove shared RAW pieces used by another Blackmagic install. | Leaves RAW payload/receipts after uninstall. | In `blackmagic-camera.rb`, remove `script:` and the RAW `uninstall_postflight_steps`; add reference-aware RAW cleanup only if needed. |
+| `blackmagic-cintel` | Cintel plus Desktop Video, Media Express, Disk Speed Test, drivers, NLE plug-ins and helper jobs. | Leave shared Desktop Video stack unless reference-aware cleanup proves Cintel owns it. | Can remove shared Desktop Video/driver components used by another Blackmagic install. | Leaves drivers/helpers/shared apps behind after Cintel uninstall. | In `blackmagic-cintel.rb`, remove `early_script`/`script`, DesktopVideo/MediaExpress/DiskSpeedTest `pkgutil` entries and helper `launchctl`/`delete` cleanup together. |
+
+- **Camera:** `uninstall.sh` calls `uninstall4.sh` for RAW and `uninstall1.sh` for Camera. RAW cleanup
+  removes SDK/documents, NLE plug-ins and camera datapacks; it keeps player/speed-test apps when its
+  Resolve check finds they are needed. The cask therefore **forgets** the two bundled RAW receipts
+  after the scripts run instead of deleting their payload with `pkgutil`, which would undo that
+  preservation decision. It never forgets Resolve's `BlackmagicRaw_resolve` receipt. Native installer
+  choice overrides were tried and rejected: deselecting both RAW choices reset the first selection,
+  so the final cask retains the original full package. Policy notes are in the cask.
+- **Cintel:** the two wrappers perform both root launch-daemon/driver-extension cleanup and normal
+  Cintel/Desktop Video cleanup. They also remove Desktop Video, Media Express, Disk Speed Test,
+  drivers and NLE plug-ins. Real tests found two orphaned plists: `DesktopVideoHelper.plist` from the
+  payload, and `DesktopVideoDriverExtension.Helper.plist` created by driver deactivation. The cask
+  explicitly removes both helper jobs/plists and any remaining privileged helper. The final repeated
+  install/uninstall removed all 465 recorded payload files and both orphan paths; no Blackmagic
+  system extension or helper job remained. The native scripts still print legacy `launchctl unload`
+  warnings for absent jobs. The cask records how to opt out of the shared bundle/cleanup together.
+- **Videohub:** both its root daemon-cleanup wrapper and normal file-cleanup wrapper are required.
+  Camera/Cintel wrapper scripts receive their Resources directory as the **second** argument,
+  matching the native app's callback contract.
+
+Existing manual Camera, Converters and Streaming installations were removed, with user approval,
+before establishing each round-trip baseline; they were not restored. The final global receipt diff
+contained only those fifteen authorised pre-existing product receipts, with no new receipts left.
+Shared RAW file hashes were checked for the other products; Camera/Cintel intentionally follow the
+vendor's destructive shared-component policy, not a coexistence guarantee.
+
+This verifies installation and cleanup, not hardware operation or app launch. Cintel recommends a
+restart; no restart was performed. The standalone RAW 1.4 apps are Intel-only and still need Rosetta
+to run on Apple Silicon; no Rosetta installation or licence acceptance was performed.
 
 ## Original POC plan (historical — all done)
 

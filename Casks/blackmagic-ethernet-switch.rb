@@ -46,7 +46,9 @@ cask "blackmagic-ethernet-switch" do
 
   pkg "Install Ethernet Switch #{version}.pkg"
 
-  # Three receipts: EthernetSwitch, EthernetSwitchAssets, EthernetSwitchUninstaller. This value is a
-  # regex passed to `pkgutil --pkgs=`, not a shell glob, so it needs `.*` rather than `*`.
-  uninstall pkgutil: "com.blackmagic-design.EthernetSwitch.*"
+  uninstall pkgutil: [
+    "^com\\.blackmagic-design\\.EthernetSwitch$",
+    "^com\\.blackmagic-design\\.EthernetSwitchAssets$",
+    "^com\\.blackmagic-design\\.EthernetSwitchUninstaller$",
+  ]
 end

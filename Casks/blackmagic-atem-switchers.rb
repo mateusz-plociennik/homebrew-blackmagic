@@ -22,5 +22,10 @@ cask "blackmagic-atem-switchers" do
 
   pkg "Install ATEM #{version}.pkg"
 
-  uninstall pkgutil: "(?:com\\.blackmagic\\-design\\.Switchers|com\\.blackmagic\\-design\\.StreamingBridge|com\\.blackmagic\\-design\\.SwitchersAssets|com\\.blackmagic\\-design\\.SwitchersUninstaller)"
+  uninstall pkgutil: [
+    "^com\\.blackmagic-design\\.StreamingBridge$",
+    "^com\\.blackmagic-design\\.Switchers$",
+    "^com\\.blackmagic-design\\.SwitchersAssets$",
+    "^com\\.blackmagic-design\\.SwitchersUninstaller$",
+  ]
 end

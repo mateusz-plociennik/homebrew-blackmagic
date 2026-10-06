@@ -50,7 +50,7 @@ cask "blackmagic-davinci-resolve" do
   # binary and left 200-odd stale files behind, an app that no longer launches. A cask that installed
   # the bundle should remove the bundle; a husk is worse than either outcome, and reinstalling either
   # product restores it whole.
-  uninstall pkgutil: "com.blackmagic-design.ManifestLite",
+  uninstall pkgutil: "^com\\.blackmagic-design\\.ManifestLite$",
             delete:  "/Applications/Blackmagic Proxy Generator Lite.app"
 
   # Resolve keeps its databases, project media and logs outside the installed tree, and losing a

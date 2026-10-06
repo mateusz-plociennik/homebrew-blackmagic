@@ -65,6 +65,9 @@ jobs:
       - name: Run the cask generator tests
         run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/bmd_cask_generator_test.rb"
 
+      - name: Run the native cask uninstaller tests
+        run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/cask_uninstall_test.rb"
+
       - name: Run the missing-products report tests
         run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/bmd_product_report_test.rb"
 

@@ -22,6 +22,12 @@ cask "blackmagic-video-assist" do
 
   pkg "Install Video Assist #{version}.pkg"
 
-  uninstall pkgutil: "(?:com\\.blackmagic\\-design\\.VideoAssist|com\\.blackmagic\\-design\\.BlackmagicRaw|com\\.blackmagic\\-design\\.BlackmagicRawSDK|com\\.blackmagic\\-design\\.VideoAssistAssets|com\\.blackmagic\\-design\\.VideoAssistUninstaller)",
+  uninstall pkgutil: [
+              "^com\\.blackmagic-design\\.BlackmagicRaw$",
+              "^com\\.blackmagic-design\\.BlackmagicRawSDK$",
+              "^com\\.blackmagic-design\\.VideoAssist$",
+              "^com\\.blackmagic-design\\.VideoAssistAssets$",
+              "^com\\.blackmagic-design\\.VideoAssistUninstaller$",
+            ],
             delete:  "/Applications/Blackmagic Video Assist"
 end
