@@ -51,8 +51,11 @@ def assign_copilot(labelled: "", issues: [44], busy: 0, state: "OPEN", labels: [
   end
 end
 
-def pr_reference(state, cross_repository: false)
-  { isCrossRepository: cross_repository, source: { __typename: "PullRequest", number: 75, state: } }
+def pr_reference(state, cross_repository: false, body: "Adds casks for #44", closes: false)
+  {
+    isCrossRepository: cross_repository, willCloseTarget: closes,
+    source: { __typename: "PullRequest", number: 75, state:, body: }
+  }
 end
 
 puts "\nassign-copilot"
@@ -77,6 +80,28 @@ end
 check("closed unmerged and cross-repository PRs do not block an issue") do
   ok, assigned = assign_copilot(references: [[pr_reference("CLOSED"), pr_reference("OPEN", cross_repository: true)]])
   ok && assigned == ["44"]
+end
+
+check("incidental references from PR comments do not block unrelated work") do
+  ok, assigned = assign_copilot(references: [[pr_reference("MERGED", body: "Configure the software factory")]])
+  ok && assigned == ["44"]
+end
+
+check("similarly numbered issues and references to other repositories do not block work") do
+  ok, assigned = assign_copilot(references: [[pr_reference("OPEN", body: "Fixes #440 and other/repo#44")]])
+  ok && assigned == ["44"]
+end
+
+["Adds o/r#44", "Adds https://github.com/o/r/issues/44"].each do |body|
+  check("qualified PR-body references also block duplicate work: #{body}") do
+    ok, assigned = assign_copilot(references: [[pr_reference("OPEN", body:)]])
+    ok && assigned.empty?
+  end
+end
+
+check("an explicit closing link blocks work even without an issue reference in the PR body") do
+  ok, assigned = assign_copilot(references: [[pr_reference("OPEN", body: "Implement cask", closes: true)]])
+  ok && assigned.empty?
 end
 
 [

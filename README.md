@@ -140,8 +140,9 @@ Videohub, so it reports the wrong product's version. `lib/bmd_catalog.rb` has th
 
 Agent work is triggered by labels: adding `ready-for-agent` to an issue assigns it to the Copilot coding
 agent, which opens a PR (see the Copilot section of `AGENTS.md`).
-Both the label trigger and the daily queue recheck issue eligibility and skip issues mentioned by
-an open or merged PR in this repository, including batch PRs that deliberately do not close issues.
+Both the label trigger and the daily queue recheck issue eligibility and skip issues linked for
+closure or mentioned in an open/merged PR body in this repository, including batch PRs that
+deliberately do not close issues. Incidental references in PR comments do not block work.
 Closed, unmerged PRs do not block retries. Remove `ready-for-agent` from completed or deferred work;
 use `backlog` to prevent assignment. Label triggers explicitly start work even while another agent PR
 is open; the daily queue waits until Copilot has no open PR.
