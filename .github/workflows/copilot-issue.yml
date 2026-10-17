@@ -25,7 +25,15 @@ jobs:
       github.event_name != 'issues' ||
       (github.event.label.name == 'ready-for-agent' && github.event.issue.state == 'open')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
+      - name: Checkout assignment script
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
       - name: Assign to Copilot
         env:
           # GITHUB_TOKEN cannot assign Copilot. Needs a PAT of a Copilot-licensed user with read/write on
@@ -33,23 +41,4 @@ jobs:
           GH_TOKEN: ${{ secrets.COPILOT_ASSIGN_TOKEN }}
           GH_REPO: ${{ github.repository }}
           LABELLED_ISSUE: ${{ github.event.issue.number }}
-        run: |
-          set -euo pipefail
-          issue="$LABELLED_ISSUE"
-          if [[ -z "$issue" ]]; then
-            busy=$(gh pr list --state open --search "author:app/copilot-swe-agent" --json number --jq length)
-            if (( busy > 0 )); then
-              echo "Copilot has $busy open PR(s); not starting another." | tee -a "$GITHUB_STEP_SUMMARY"
-              exit 0
-            fi
-            # `-linked:pr` also excludes issues with an open linked PR, not just closing ones.
-            issue=$(gh issue list --state open --limit 1 \
-              --search "label:ready-for-agent -label:backlog -assignee:copilot-swe-agent[bot] -linked:pr sort:created-asc" \
-              --json number --jq '.[0].number // empty')
-            if [[ -z "$issue" ]]; then
-              echo "No ready-for-agent issue waiting." | tee -a "$GITHUB_STEP_SUMMARY"
-              exit 0
-            fi
-          fi
-          gh issue edit "$issue" --add-assignee "@copilot"
-          echo "Assigned #$issue to Copilot." >> "$GITHUB_STEP_SUMMARY"
+        run: bash bin/assign-copilot
