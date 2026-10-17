@@ -34,4 +34,5 @@ brew ruby test/cask_uninstall_test.rb
 brew ruby test/bmd_product_report_test.rb
 brew ruby test/compare_receipts_test.rb
 brew ruby test/dispatch_bump_ci_test.rb
+brew ruby test/assign_copilot_test.rb
 bash test/changed_casks_test.sh
