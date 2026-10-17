@@ -39,14 +39,20 @@ while read -r issue <&3; do
             nodes {
               ... on CrossReferencedEvent {
                 isCrossRepository
-                source { __typename ... on PullRequest { number state } }
+                willCloseTarget
+                source { __typename ... on PullRequest { number state body } }
               }
             }
           }
         }
       }
-    }' | jq -sr '[.[].data.repository.issue.timelineItems.nodes[]
+    }' | jq -sr --arg issue "$issue" --arg repo "$GH_REPO" '
+      ($repo | gsub("[.]"; "[.]")) as $repository |
+      ("(^|[^A-Za-z0-9_/.-])(#|" + $repository + "#|https://github[.]com/" +
+        $repository + "/issues/)" + $issue + "([^0-9]|$)") as $reference |
+      [.[].data.repository.issue.timelineItems.nodes[]
       | select(.isCrossRepository == false and .source.__typename == "PullRequest")
+      | select(.willCloseTarget or ((.source.body // "") | test($reference)))
       | .source | select(.state == "OPEN" or .state == "MERGED")
       | "#\(.number)"] | unique | join(", ")')
   if [[ -n "$prs" ]]; then
