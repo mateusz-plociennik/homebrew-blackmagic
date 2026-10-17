@@ -44,7 +44,7 @@ jobs:
             fi
             # `-linked:pr` also excludes issues with an open linked PR, not just closing ones.
             issue=$(gh issue list --state open --limit 1 \
-              --search "label:ready-for-agent -label:backlog -assignee:Copilot -linked:pr sort:created-asc" \
+              --search "label:ready-for-agent -label:backlog -assignee:copilot-swe-agent[bot] -linked:pr sort:created-asc" \
               --json number --jq '.[0].number // empty')
             if [[ -z "$issue" ]]; then
               echo "No ready-for-agent issue waiting." | tee -a "$GITHUB_STEP_SUMMARY"
