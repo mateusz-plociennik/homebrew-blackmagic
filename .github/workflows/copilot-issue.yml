@@ -1,36 +1,55 @@
-name: Assign next issue to Copilot
+name: Assign ready issues to Copilot
 
-# Hands the oldest open issue that nobody is on (no assignee, no linked PR) to the Copilot coding
-# agent, which works on it and opens the PR itself.
+# Software factory trigger: an open issue labelled `ready-for-agent` is handed to the Copilot coding
+# agent, which works on it and opens a PR. Adding the label assigns at once. The daily run is a
+# backstop that assigns the oldest labelled issue Copilot is not on yet, and only while Copilot has
+# no open PR, so the queue drains one issue at a time. Human assignees do not block either path.
 
 on:
+  issues:
+    types: [labeled]
   schedule:
     - cron: "43 7 * * *"
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}
+  # Per issue: a single shared group would drop all but one pending run when several are labelled.
+  group: ${{ github.workflow }}-${{ github.event.issue.number || 'queue' }}
   cancel-in-progress: false
 
 permissions: {}
 
 jobs:
   assign:
+    if: >-
+      github.event_name != 'issues' ||
+      (github.event.label.name == 'ready-for-agent' && github.event.issue.state == 'open')
     runs-on: ubuntu-latest
     steps:
-      - name: Assign oldest free issue
+      - name: Assign to Copilot
         env:
-          # GITHUB_TOKEN cannot assign Copilot; needs a user PAT with Issues read/write on this repo.
+          # GITHUB_TOKEN cannot assign Copilot. Needs a PAT of a Copilot-licensed user with read/write on
+          # this repo's Actions, Contents, Issues and Pull requests.
           GH_TOKEN: ${{ secrets.COPILOT_ASSIGN_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          LABELLED_ISSUE: ${{ github.event.issue.number }}
         run: |
           set -euo pipefail
-          # Filtered server-side: `-linked:pr` also excludes issues with an open linked PR.
-          issue=$(gh issue list --state open --limit 1 --search "no:assignee -linked:pr sort:created-asc" \
-            --json number --jq '.[0].number // empty')
+          issue="$LABELLED_ISSUE"
           if [[ -z "$issue" ]]; then
-            echo "No free issue."
-            exit 0
+            busy=$(gh pr list --state open --search "author:app/copilot-swe-agent" --json number --jq length)
+            if (( busy > 0 )); then
+              echo "Copilot has $busy open PR(s); not starting another." | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            # `-linked:pr` also excludes issues with an open linked PR, not just closing ones.
+            issue=$(gh issue list --state open --limit 1 \
+              --search "label:ready-for-agent -label:backlog -assignee:Copilot -linked:pr sort:created-asc" \
+              --json number --jq '.[0].number // empty')
+            if [[ -z "$issue" ]]; then
+              echo "No ready-for-agent issue waiting." | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
           fi
           gh issue edit "$issue" --add-assignee "@copilot"
           echo "Assigned #$issue to Copilot." >> "$GITHUB_STEP_SUMMARY"

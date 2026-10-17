@@ -138,6 +138,9 @@ download id. No HTML is parsed. Their version-pointer endpoint would be lighter 
 *product family* slug: Blackmagic Ethernet Switch shares the `videohub` slug with Blackmagic
 Videohub, so it reports the wrong product's version. `lib/bmd_catalog.rb` has the detail.
 
+Agent work is triggered by labels: adding `ready-for-agent` to an issue assigns it to the Copilot coding
+agent, which opens a PR (see the Copilot section of `AGENTS.md`).
+
 Bumping the cask is automated: a GitHub Actions workflow (twice a week) runs `brew bump`, which compares each
 cask's livecheck result against its pinned version and opens a pull request for anything newer —
 downloading the artifact to compute the new `sha256`. Run it on demand from the Actions tab; tick
