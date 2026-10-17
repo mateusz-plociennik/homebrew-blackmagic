@@ -23,7 +23,6 @@ cask "blackmagic-cloud-store" do
   pkg "Install Cloud Store #{version}.pkg"
 
   uninstall pkgutil: [
-    "^com\\.blackmagic-design\\.blackmagic-proxy-generator-lite-macos$",
     "^com\\.blackmagic-design\\.ManifestProxyGenerator$",
     "^com\\.blackmagic-design\\.SharedStorage$",
     "^com\\.blackmagic-design\\.SharedStorageAssets$",
