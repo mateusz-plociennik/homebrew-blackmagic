@@ -71,6 +71,20 @@ requests.
    receipt comparison does not find this problem. Refer to the notes in
    [`blackmagic-davinci-resolve.rb`](Casks/blackmagic-davinci-resolve.rb).
 
+### Uninstall policy
+
+The generated `uninstall` stanza removes only the package receipts. If the product has a vendor
+uninstaller, change the stanza:
+
+- Remove the same items as the vendor uninstaller. If the vendor uninstaller is a script, run it
+  with `uninstall script:`. If the vendor uninstaller cannot run unattended, copy its steps into
+  `launchctl:`, `delete:` and `rmdir:`.
+- Keep the receipts correct. Remove a receipt when the uninstall removes its files. Keep a receipt
+  when the vendor uninstaller keeps its files.
+- Write a note in the cask. The note tells how to change to receipt-only cleanup.
+
+If the uninstall keeps receipts on purpose, add the cask to `SKIP_CASKS` in `ci.yml`.
+
 To list the Blackmagic products that have no cask and no skip reason, run:
 
 ```sh
