@@ -44,7 +44,7 @@ Copilot has no open PR. `.github/workflows/copilot-setup-steps.yml` prepares the
 runner: Homebrew is installed, the hooks are enabled and `bin/verify` has
 already passed once.
 
-The agent runs on Ubuntu with about 14 GB of free disk after setup, behind a
+The agent runs on Ubuntu with about 100 GB of free disk after setup, behind a
 firewall that must allow `www.blackmagicdesign.com` and
 `sw.blackmagicdesign.com` for catalog, resolve and download calls. It cannot run
 the macOS install from an issue's completion gate. Leave that box unchecked; the
