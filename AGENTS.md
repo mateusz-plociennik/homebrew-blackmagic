@@ -35,3 +35,19 @@ downloads its whole artifact, which is why it is not a per-PR check. `ci.yml`'s
 cask the PR changes. See the
 `#7` section in `HANDOFF.md` before touching either, and before "fixing"
 `BmdDownloadStrategy#resolve_url_basename_time_file_size`.
+## Copilot coding agent
+
+Issues reach the Copilot coding agent through the software factory in
+`.github/workflows/copilot-issue.yml`: labelling an open issue `ready-for-agent`
+assigns it to Copilot, and a daily run assigns the oldest waiting one whenever
+Copilot has no open PR. `.github/workflows/copilot-setup-steps.yml` prepares the
+runner: Homebrew is installed, the hooks are enabled and `bin/verify` has
+already passed once.
+
+The agent runs on Ubuntu with about 100 GB of free disk after setup, behind a
+firewall that must allow `www.blackmagicdesign.com` and
+`sw.blackmagicdesign.com` for catalog, resolve and download calls. It cannot run
+the macOS install from an issue's completion gate. Leave that box unchecked; the
+PR's `ci.yml` `install` job does it on macOS. If a download fails for size or
+firewall reasons, say so in the PR with the blocked host or the `df -h` output
+rather than working around it, and run `brew cleanup -s` after large fetches.
