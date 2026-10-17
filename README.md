@@ -138,6 +138,14 @@ download id. No HTML is parsed. Their version-pointer endpoint would be lighter 
 *product family* slug: Blackmagic Ethernet Switch shares the `videohub` slug with Blackmagic
 Videohub, so it reports the wrong product's version. `lib/bmd_catalog.rb` has the detail.
 
+Agent work is triggered by labels: adding `ready-for-agent` to an issue assigns it to the Copilot coding
+agent, which opens a PR (see the Copilot section of `AGENTS.md`).
+Both the label trigger and the daily queue recheck issue eligibility and skip issues mentioned by
+an open or merged PR in this repository, including batch PRs that deliberately do not close issues.
+Closed, unmerged PRs do not block retries. Remove `ready-for-agent` from completed or deferred work;
+use `backlog` to prevent assignment. Label triggers explicitly start work even while another agent PR
+is open; the daily queue waits until Copilot has no open PR.
+
 Bumping the cask is automated: a GitHub Actions workflow (twice a week) runs `brew bump`, which compares each
 cask's livecheck result against its pinned version and opens a pull request for anything newer —
 downloading the artifact to compute the new `sha256`. Run it on demand from the Actions tab; tick

@@ -1,0 +1,62 @@
+#!/bin/bash
+# Both factory triggers share the same live eligibility and PR-reference checks.
+set -euo pipefail
+: "${GH_REPO:?}" "${GH_TOKEN:?COPILOT_ASSIGN_TOKEN is required}" "${GITHUB_STEP_SUMMARY:?}"
+
+issues="${LABELLED_ISSUE:-}"
+if [[ -z "$issues" ]]; then
+  busy=$(gh pr list --state open --search "author:app/copilot-swe-agent" --json number --jq length)
+  if (( busy > 0 )); then
+    echo "Copilot has $busy open PR(s); not starting another." | tee -a "$GITHUB_STEP_SUMMARY"
+    exit 0
+  fi
+  issues=$(gh issue list --state open --limit 1000 \
+    --search "label:ready-for-agent -label:backlog -assignee:copilot-swe-agent[bot] -linked:pr sort:created-asc" \
+    --json number --jq '.[].number')
+fi
+
+while read -r issue <&3; do
+  [[ -n "$issue" ]] || continue
+  # Re-read state: the label event or search index may be stale.
+  eligible=$(gh issue view "$issue" --json state,labels,assignees | jq '
+    .state == "OPEN" and
+    any(.labels[]; .name == "ready-for-agent") and
+    all(.labels[]; .name != "backlog") and
+    all(.assignees[]; .login != "copilot-swe-agent" and .login != "copilot-swe-agent[bot]")')
+  if [[ "$eligible" != true ]]; then
+    echo "#$issue: no longer eligible." | tee -a "$GITHUB_STEP_SUMMARY"
+    continue
+  fi
+
+  # Plain PR mentions (e.g. batch work deliberately not auto-closing issues) are not `linked:pr`.
+  # shellcheck disable=SC2016 # GraphQL variables must reach the API unexpanded.
+  prs=$(gh api graphql --paginate -f owner="${GH_REPO%/*}" -f repo="${GH_REPO#*/}" -F number="$issue" \
+    -f query='query($owner: String!, $repo: String!, $number: Int!, $endCursor: String) {
+      repository(owner: $owner, name: $repo) {
+        issue(number: $number) {
+          timelineItems(first: 100, after: $endCursor, itemTypes: [CROSS_REFERENCED_EVENT]) {
+            pageInfo { hasNextPage endCursor }
+            nodes {
+              ... on CrossReferencedEvent {
+                isCrossRepository
+                source { __typename ... on PullRequest { number state } }
+              }
+            }
+          }
+        }
+      }
+    }' | jq -sr '[.[].data.repository.issue.timelineItems.nodes[]
+      | select(.isCrossRepository == false and .source.__typename == "PullRequest")
+      | .source | select(.state == "OPEN" or .state == "MERGED")
+      | "#\(.number)"] | unique | join(", ")')
+  if [[ -n "$prs" ]]; then
+    echo "#$issue: skipping; already referenced by open/merged PR(s): $prs." | tee -a "$GITHUB_STEP_SUMMARY"
+    continue
+  fi
+
+  gh issue edit "$issue" --add-assignee "@copilot"
+  echo "Assigned #$issue to Copilot." | tee -a "$GITHUB_STEP_SUMMARY"
+  exit 0
+done 3<<<"$issues"
+
+echo "No eligible ready-for-agent issue waiting." | tee -a "$GITHUB_STEP_SUMMARY"
