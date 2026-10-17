@@ -12,9 +12,9 @@ require_relative "bmd_catalog"
 require_relative "bmd_skip_list"
 
 # Reports Blackmagic products that have neither a cask nor a recorded reason to stay uncasked. See
-# #11. Cheap and scheduled, not continuous: files at most one issue per run, and never re-files while
-# an open issue already reports the same set. Reuses `BmdCatalog`'s catalog read (#10's second entry
-# point on the same script); `lib/bmd_catalog.rb` is unchanged by this.
+# #11. Manual, not scheduled: files at most one issue per run, and never re-files while an open issue
+# already reports the same set. Reuses `BmdCatalog`'s catalog read (#10's second entry point on the
+# same script); `lib/bmd_catalog.rb` is unchanged by this.
 module BmdProductReport
   ISSUE_TITLE = "New Blackmagic products with no cask"
 
@@ -55,19 +55,6 @@ module BmdProductReport
       end
     end
 
-    # Skip-list entries whose reason names an issue number that is no longer open — worth a mention
-    # since the entry may now be stale, but never blocks the run.
-    def stale_skip_entries(open_issue_numbers)
-      BmdSkipList::SKIP_PRODUCTS.filter_map do |name, reason|
-        numbers = reason.scan(/#(\d+)/).flatten.map(&:to_i)
-        next if numbers.empty? || numbers.any? { |n| open_issue_numbers.include?(n) }
-
-        noun = (numbers.size == 1) ? "an issue" : "issues"
-        verb = (numbers.size == 1) ? "is" : "are"
-        "#{name}: \"#{reason}\" names #{noun} that #{verb} no longer open"
-      end
-    end
-
     # The catalog product names already carried by a cask's `data: { "product" => "..." }` stanza.
     def existing_products(casks_dir)
       Dir.glob(File.join(casks_dir, "*.rb")).flat_map do |path|
@@ -75,7 +62,7 @@ module BmdProductReport
       end.to_set
     end
 
-    def render_issue_body(missing, stale_entries)
+    def render_issue_body(missing)
       rows = missing.sort.map do |name, info|
         release = info[:latest]
         "| #{name} | #{info[:count]} | #{release["name"]} | #{release["date"]} | " \
@@ -83,7 +70,7 @@ module BmdProductReport
           "#{release["relatedFamilies"]&.first} |"
       end
 
-      body = <<~BODY
+      <<~BODY
         Products in Blackmagic's catalog with neither a cask nor a `lib/bmd_skip_list.rb` entry.
 
         | Product | Releases | Latest release | Date | Registration | Terms | Family |
@@ -92,13 +79,6 @@ module BmdProductReport
 
         Bootstrap with `brew ruby bin/generate-cask "<Product Name>"` (#10) and install-verify (#12).
       BODY
-
-      unless stale_entries.empty?
-        body << "\n## Possibly-stale skip-list entries\n\n"
-        stale_entries.each { |entry| body << "- #{entry}\n" }
-      end
-
-      body
     end
 
     # ---------------------------------------------------------------------
@@ -109,19 +89,17 @@ module BmdProductReport
       casks_dir ||= File.expand_path("../Casks", __dir__)
       releases = BmdCatalog.send(:releases, timeout:)
       missing_products = missing(releases, existing_products(casks_dir))
-      stale = stale_skip_entries(open_issue_numbers)
-      stale.each { |entry| puts "stale skip-list entry: #{entry}" }
 
       if missing_products.empty?
         puts "No products found with neither a cask nor a skip-list entry."
       else
-        report(missing_products, stale)
+        report(missing_products)
       end
     end
 
     private
 
-    def report(missing_products, stale)
+    def report(missing_products)
       if (existing = find_open_issue(missing_products.keys))
         puts <<~MESSAGE
           #{missing_products.size} product(s) missing a cask, but ##{existing} already reports this set.
@@ -130,7 +108,7 @@ module BmdProductReport
         return
       end
 
-      body = render_issue_body(missing_products, stale)
+      body = render_issue_body(missing_products)
       puts gh("issue", "create", "--title", ISSUE_TITLE, "--body-file", "-", stdin: body)
     end
 
@@ -166,10 +144,6 @@ module BmdProductReport
         match = line.match(/\A\|\s+(.+?)\s+\|\s+\d+\s+\|/)
         match[1] if match
       end.sort
-    end
-
-    def open_issue_numbers
-      gh_json("issue", "list", "--state", "open", "--limit", "200", "--json", "number").map { |i| i["number"] }
     end
   end
 end

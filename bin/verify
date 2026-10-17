@@ -4,12 +4,33 @@ set -eu
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_root"
 
-brew test-bot --only-tap-syntax
+brew_repo=$(brew --repository)
+tap_user="copilot-verify-$$"
+tap_repo="blackmagic"
+tap="$tap_user/$tap_repo"
+tap_parent="$brew_repo/Library/Taps/$tap_user"
+tap_dir="$tap_parent/homebrew-$tap_repo"
+
+cleanup() {
+  [ ! -L "$tap_dir" ] || rm "$tap_dir"
+  rmdir "$tap_parent" 2>/dev/null || true
+}
+
+trap cleanup EXIT HUP INT TERM
+mkdir -p "$tap_parent"
+if [ -e "$tap_dir" ] || [ -L "$tap_dir" ]; then
+  echo "Refusing to replace existing tap path: $tap_dir" >&2
+  exit 1
+fi
+ln -s "$repo_root" "$tap_dir"
+
+brew test-bot --only-tap-syntax --tap="$tap"
 brew ruby test/bmd_catalog_test.rb
 brew ruby test/bmd_config_test.rb
 brew ruby test/bmd_resolver_test.rb
 brew ruby test/bmd_terms_test.rb
 brew ruby test/bmd_cask_generator_test.rb
+brew ruby test/cask_uninstall_test.rb
 brew ruby test/bmd_product_report_test.rb
 brew ruby test/compare_receipts_test.rb
 brew ruby test/dispatch_bump_ci_test.rb

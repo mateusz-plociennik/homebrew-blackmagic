@@ -65,6 +65,9 @@ jobs:
       - name: Run the cask generator tests
         run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/bmd_cask_generator_test.rb"
 
+      - name: Run the native cask uninstaller tests
+        run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/cask_uninstall_test.rb"
+
       - name: Run the missing-products report tests
         run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/bmd_product_report_test.rb"
 
@@ -86,8 +89,9 @@ jobs:
     if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: macos-latest
     env:
-      # Same list and reason as `audit-online.yml`: registration-path casks need a real identity.
-      SKIP_CASKS: blackmagic-davinci-resolve
+      # Resolve: same reason as `audit-online.yml`, registration-path casks need a real identity.
+      # Cintel: its uninstall script deactivates a driver extension, which waits for user approval.
+      SKIP_CASKS: blackmagic-davinci-resolve blackmagic-cintel
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
@@ -111,6 +115,8 @@ jobs:
           echo "casks=$casks" >> "$GITHUB_OUTPUT"
 
       - name: Install and uninstall each changed cask
+        # A cask prompting for approval hangs rather than fails; cap it below the 6h default.
+        timeout-minutes: 60
         # No token in this step: `brew install` evaluates the PR's cask Ruby.
         env:
           TAP: ${{ steps.set-up-homebrew.outputs.tap-name }}
@@ -126,7 +132,7 @@ jobs:
           failed=""
           for cask in $CASKS; do
             case " $SKIP_CASKS " in
-              *" $cask "*) echo "::notice::Skipping $cask: registration-gated, install it locally"; continue ;;
+              *" $cask "*) echo "::notice::Skipping $cask: cannot install unattended, install it locally"; continue ;;
             esac
             echo "::group::$cask"
             # Outside any `if`, so a failing pkgutil stops the step instead of reading as no receipts.

@@ -3,10 +3,10 @@
 A Homebrew tap for Blackmagic Design software, installing directly from Blackmagic's official
 download endpoints instead of their web download form.
 
-> **Status: both paths work.** `blackmagic-ethernet-switch` (anonymous, zero setup) and
-> `blackmagic-davinci-resolve` (registration, needs the config file below) have each been installed
-> and uninstalled end to end. The other casks have no recorded install yet; CI installs any anonymous cask a
-> pull request changes. Remaining work is tracked in the issues.
+> **Status: 16 casks with recorded install/uninstall verification.** The eleven coverage additions
+> passed local macOS install, uninstall, receipt and payload checks on 2026-10-07. CI installs any
+> anonymous cask a pull request changes. Gated products need your own registration details and
+> deliberate licence acceptance where required.
 
 ## Why this can't be a normal cask
 
@@ -59,6 +59,20 @@ install — that gate is doing exactly what it should; read `lib/` before you cl
 Casks are prefixed `blackmagic-*`,
 which keeps them collision-free against homebrew-cask (where a token clash would silently win) and
 makes the whole tap discoverable via `blackmagic-<TAB>`.
+
+### Uninstall
+
+```sh
+brew uninstall --cask blackmagic-audio-monitor
+```
+
+The newer package-backed casks run the scripts shipped in the vendor's Uninstall app, then clean up
+receipts. They install the full vendor bundle: Camera includes RAW tools and plug-ins; Cintel includes
+Desktop Video drivers, Media Express and Disk Speed Test. Their uninstallers can remove shared
+components used by another Blackmagic product, just as the vendor's uninstallers do. Camera preserves
+RAW player apps when the vendor script detects that Resolve needs them, but removes the RAW SDK,
+plug-ins and camera datapacks. Reinstall affected products if their shared components are removed.
+The Camera and Cintel casks contain notes explaining how to change that policy.
 
 ## Configuration
 

@@ -22,5 +22,10 @@ cask "blackmagic-cloud-store" do
 
   pkg "Install Cloud Store #{version}.pkg"
 
-  uninstall pkgutil: "(?:com\\.blackmagic\\-design\\.SharedStorage|com\\.blackmagic\\-design\\.ManifestProxyGenerator|com\\.blackmagic\\-design\\.SharedStorageAssets|com\\.blackmagic\\-design\\.SharedStorageUninstaller)"
+  uninstall pkgutil: [
+    "^com\\.blackmagic-design\\.ManifestProxyGenerator$",
+    "^com\\.blackmagic-design\\.SharedStorage$",
+    "^com\\.blackmagic-design\\.SharedStorageAssets$",
+    "^com\\.blackmagic-design\\.SharedStorageUninstaller$",
+  ]
 end

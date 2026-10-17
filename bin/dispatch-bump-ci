@@ -48,7 +48,7 @@ while read -r pr branch sha <&3; do
     echo "It runs style, audit, the tests, and a real install + uninstall of \`$cask\` on a fresh runner."
     echo
     if [[ " $skip " == *" $cask "* ]]; then
-      echo "- [ ] \`$cask\` is registration-gated, so CI skips the install. Before merging, run locally:"
+      echo "- [ ] \`$cask\` cannot be installed unattended, so CI skips it. Before merging, run locally:"
       echo "      \`brew install --cask $TAP/$cask && brew uninstall --cask $TAP/$cask\`"
     else
       echo "- [ ] CI green → merge. The install proves the \`pkg\` name, the uninstall proves the receipts."
