@@ -106,7 +106,7 @@ end
 
 [
   { state: "CLOSED" }, { labels: [] }, { labels: ["ready-for-agent", "backlog"] },
-  { assignee: "copilot-swe-agent" }, { assignee: "copilot-swe-agent[bot]" }
+  { assignee: "Copilot" }, { assignee: "copilot-swe-agent" }, { assignee: "copilot-swe-agent[bot]" }
 ].each do |options|
   check("a stale label event cannot assign an ineligible issue: #{options}") do
     ok, assigned = assign_copilot(labelled: 44, **options)

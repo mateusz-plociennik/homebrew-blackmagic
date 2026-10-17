@@ -22,7 +22,8 @@ while read -r issue <&3; do
     .state == "OPEN" and
     any(.labels[]; .name == "ready-for-agent") and
     all(.labels[]; .name != "backlog") and
-    all(.assignees[]; .login != "copilot-swe-agent" and .login != "copilot-swe-agent[bot]")')
+    all(.assignees[]; (.login | ascii_downcase) as $login |
+      $login != "copilot" and $login != "copilot-swe-agent" and $login != "copilot-swe-agent[bot]")')
   if [[ "$eligible" != true ]]; then
     echo "#$issue: no longer eligible." | tee -a "$GITHUB_STEP_SUMMARY"
     continue
