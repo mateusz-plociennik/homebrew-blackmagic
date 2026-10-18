@@ -25,7 +25,7 @@ while read -r pr branch sha <&3; do
   elif gh workflow run ci.yml --repo "$REPO" --ref "$branch" -f pr="$pr"; then
     echo "#$pr: dispatched CI on $branch"
   else
-    echo "::warning::Could not dispatch CI for #$pr ($branch); the next bump run retries. If it keeps failing, see HANDOFF.md."
+    echo "::warning::Could not dispatch CI for #$pr ($branch); the next bump run retries. If it keeps failing, see CONTRIBUTING.md."
     failed="$failed #$pr"
     continue
   fi

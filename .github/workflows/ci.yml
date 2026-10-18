@@ -122,7 +122,7 @@ jobs:
           TAP: ${{ steps.set-up-homebrew.outputs.tap-name }}
           CASKS: ${{ steps.changed.outputs.casks }}
         # Receipt equality does not prove shared payload survived: pkgutil removes files a neighbour's
-        # receipt also claims (see HANDOFF.md, DaVinci Resolve). Shared components need targeted checks.
+        # receipt also claims (see Casks/blackmagic-davinci-resolve.rb). Shared components need targeted checks.
         run: |
           set -euo pipefail
           [ -n "$CASKS" ] || { echo "No casks changed"; exit 0; }

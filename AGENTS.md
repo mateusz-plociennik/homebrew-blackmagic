@@ -1,82 +1,30 @@
-# Agent Guide
+# AGENTS.md
 
-## Ruby and cask verification
+Human docs: `README.md` (users), `CONTRIBUTING.md` (workflows, labels, adding casks). Design rationale lives in code comments in `lib/` and `Casks/`; read them before changing behaviour.
 
-Before considering a Ruby or cask change complete, run:
+## Verify
 
-```sh
-bin/verify
-```
+- Done = `bin/verify` passes (CI's `test-bot` job + all tests; offline). Plain `ruby`/`rubocop`/`brew style` are not substitutes; tests need `brew ruby`.
+- Hooks: `git config core.hooksPath .githooks`. `--no-verify` only deliberately, with the reason in the PR.
+- Network: only `bump.yml`, `audit-online.yml` (downloads full artifacts) and `ci.yml`'s PR `install` job. Keep it that way.
+- `BmdDownloadStrategy#resolve_url_basename_time_file_size` is load-bearing; read its comment before touching it.
 
-This is the local equivalent of `.github/workflows/ci.yml`: it runs
-`brew test-bot --only-tap-syntax` against this working copy through a
-throwaway tap symlink, then every repository test with Homebrew's Ruby. Plain
-system `ruby`, `rubocop`, and `brew style` alone are not substitutes for this
-check.
+## Gotchas
 
-Enable the repository hook once per checkout:
+- Registration details: ask the user; never commit them.
+- Fetch `blackmagicdesign.com` with `curl`; WebFetch fails there.
+- Changes to `lib/` strategy, resolver or config handle PII and a remote-supplied URL: run code-review and security-review.
 
-```sh
-git config core.hooksPath .githooks
-```
-
-The pre-commit hook runs `bin/verify`, so a commit cannot pass locally unless
-the same syntax, audit, and behavior checks used by CI pass. Use
-`git commit --no-verify` only when intentionally bypassing verification and
-record the reason in the change discussion.
-
-The checks require Homebrew. The test files must be run with `brew ruby`
-because they load Homebrew libraries such as `utils/curl`.
-
-Neither `bin/verify` nor `ci.yml`'s `test-bot` job makes a network call. Two workflows do:
-`bump.yml` twice a week, and `audit-online.yml` weekly, which runs
-`brew audit --cask --online` — that passes for this tap's casks, but each one
-downloads its whole artifact, which is why it is not a per-PR check. `ci.yml`'s
-`install` job is the one exception: on PRs only, it installs and uninstalls each
-cask the PR changes. See the
-`#7` section in `HANDOFF.md` before touching either, and before "fixing"
-`BmdDownloadStrategy#resolve_url_basename_time_file_size`.
 ## Copilot coding agent
 
-Issues reach the Copilot coding agent through the software factory in
-`.github/workflows/copilot-issue.yml`: readiness changes and issue/PR closures
-wake a shared serial queue, with no cron. It assigns the oldest eligible
-`ready-for-agent` issue only when Copilot has no open PR or assignment awaiting
-its first PR since the latest assignment, including retries. Native GitHub
-blockers must be closed; `backlog`, existing Copilot
-assignees, and open/merged implementation PR references prevent assignment.
-Human assignees do not reserve the queue. Gated work and merged work awaiting
-evidence stay in `backlog`, not `ready-for-agent`. A closed unmerged PR releases
-the queue slot, but retrying its issue requires removing and re-adding Copilot.
-If a session stops before opening a PR, remove its ready label and Copilot
-assignee to release the reservation. Manual workflow dispatch rescans the queue.
-
-For an assigned issue or approved implementation spec, read and follow
-`.github/skills/implement/SKILL.md` before starting. This is the cloud-compatible
-repository skill; editor plugin slash-command namespaces are not inherited.
-
-`.github/workflows/copilot-setup-steps.yml` prepares the
-runner: Homebrew is installed, the hooks are enabled and `bin/verify` has
-already passed once.
-
-The agent runs on Ubuntu with about 100 GB of free disk after setup, behind a
-firewall that must allow `www.blackmagicdesign.com` and
-`sw.blackmagicdesign.com` for catalog, resolve and download calls. It cannot run
-the macOS install from an issue's completion gate. Leave that box unchecked; the
-PR's `ci.yml` `install` job does it on macOS. If a download fails for size or
-firewall reasons, say so in the PR with the blocked host or the `df -h` output
-rather than working around it, and run `brew cleanup -s` after large fetches.
+- Assigned issue or approved spec: follow `.github/skills/implement/SKILL.md`.
+- Runner: Ubuntu, ~100 GB free, setup already ran `bin/verify`. Firewall allows `www.blackmagicdesign.com`, `sw.blackmagicdesign.com`.
+- macOS install gates: leave unchecked; PR `ci.yml` `install` job covers them.
+- Blocked download (size/firewall): report host or `df -h` in the PR; no workarounds. `brew cleanup -s` after large fetches.
+- Session stops before a PR: remove the ready label and Copilot assignee to free the queue.
 
 ## Agent skills
 
-### Issue tracker
-
-Issues are tracked in this repo's GitHub Issues via the `gh` CLI. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context: root `GLOSSARY.md` and `docs/adr/`. See `docs/agents/domain.md`.
+- Issue tracker: GitHub Issues via `gh`. See `docs/agents/issue-tracker.md`.
+- Triage labels: `docs/agents/triage-labels.md`.
+- Domain docs: `docs/agents/domain.md`.
