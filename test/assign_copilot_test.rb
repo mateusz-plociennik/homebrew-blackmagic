@@ -22,6 +22,7 @@ ASSIGN_STUB_GH = <<~SH
     "api --paginate")
       [[ -e "$FIXTURES/rest-fails" ]] && exit 1
       case "$3" in
+        */events?*) cat "$FIXTURES/assignment-events" ;;
         */dependencies/blocked_by*)
           [[ -e "$FIXTURES/dependencies-fail" ]] && exit 1
           cat "$FIXTURES/blockers" ;;
@@ -36,6 +37,7 @@ SH
 def assign_copilot(issues: [44], busy: 0, state: "OPEN", labels: ["ready-for-agent"],
                    assignee: "mateusz-plociennik", references: [[]], timelines: {},
                    assigned: [], blockers: [], blocker_pages: nil,
+                   assignment_events: nil,
                    api_fails: false, rest_fails: false, dependencies_fail: false, assign_fails: false)
   Dir.mktmpdir do |dir|
     File.write("#{dir}/gh", ASSIGN_STUB_GH)
@@ -45,6 +47,9 @@ def assign_copilot(issues: [44], busy: 0, state: "OPEN", labels: ["ready-for-age
     File.write("#{dir}/assigned", assigned.map do |number|
       { number:, assignees: [{ login: "Copilot" }] }
     end.to_json)
+    File.write("#{dir}/assignment-events", (assignment_events || [{
+      event: "assigned", created_at: "2026-01-01T00:00:00Z", assignee: { login: "Copilot" }
+    }]).to_json)
     File.write("#{dir}/blockers", (blocker_pages || [blockers]).map(&:to_json).join("\n"))
     (issues + assigned).uniq.each do |issue|
       File.write("#{dir}/issue-#{issue}", {
@@ -68,10 +73,11 @@ def assign_copilot(issues: [44], busy: 0, state: "OPEN", labels: ["ready-for-age
   end
 end
 
-def pr_reference(state, cross_repository: false, body: "Adds casks for #44", closes: false)
+def pr_reference(state, cross_repository: false, body: "Adds casks for #44", closes: false,
+                 created_at: "2026-02-01T00:00:00Z")
   {
     isCrossRepository: cross_repository, willCloseTarget: closes,
-    source: { __typename: "PullRequest", number: 75, state:, body: }
+    source: { __typename: "PullRequest", number: 75, state:, body:, createdAt: created_at }
   }
 end
 
@@ -154,6 +160,30 @@ end
 check("an assigned issue reserves the slot before Copilot opens its PR") do
   ok, assigned, output = assign_copilot(assigned: [62])
   ok && assigned.empty? && output.include?("has not opened a PR")
+end
+
+check("an old closed PR cannot release a retried assignment's reservation") do
+  ok, assigned, output = assign_copilot(assigned: [62], timelines: {
+    62 => [[pr_reference("CLOSED", body: "Fixes #62", created_at: "2025-12-01T00:00:00Z")]],
+  })
+  ok && assigned.empty? && output.include?("has not opened a PR")
+end
+
+check("the latest Copilot assignment, not a previous assignment, defines the reservation") do
+  events = [
+    { event: "assigned", created_at: "2025-01-01T00:00:00Z", assignee: { login: "Copilot" } },
+    { event: "assigned", created_at: "2026-03-01T00:00:00Z", assignee: { login: "Copilot" } },
+    { event: "assigned", created_at: "2026-04-01T00:00:00Z", assignee: { login: "human" } },
+  ]
+  ok, assigned = assign_copilot(assigned: [62], assignment_events: events, timelines: {
+    62 => [[pr_reference("CLOSED", body: "Fixes #62")]],
+  })
+  ok && assigned.empty?
+end
+
+check("an assigned issue with no visible assignment event fails closed") do
+  ok, assigned = assign_copilot(assigned: [62], assignment_events: [])
+  !ok && assigned.empty?
 end
 
 ["CLOSED", "MERGED"].each do |state|

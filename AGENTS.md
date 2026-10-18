@@ -42,7 +42,8 @@ Issues reach the Copilot coding agent through the software factory in
 `.github/workflows/copilot-issue.yml`: readiness changes and issue/PR closures
 wake a shared serial queue, with no cron. It assigns the oldest eligible
 `ready-for-agent` issue only when Copilot has no open PR or assignment awaiting
-its first PR. Native GitHub blockers must be closed; `backlog`, existing Copilot
+its first PR since the latest assignment, including retries. Native GitHub
+blockers must be closed; `backlog`, existing Copilot
 assignees, and open/merged implementation PR references prevent assignment.
 Human assignees do not reserve the queue. Gated work and merged work awaiting
 evidence stay in `backlog`, not `ready-for-agent`. A closed unmerged PR releases

@@ -4,7 +4,7 @@ set -euo pipefail
 : "${GH_REPO:?}" "${GH_TOKEN:?COPILOT_ASSIGN_TOKEN is required}" "${GITHUB_STEP_SUMMARY:?}"
 
 referenced_prs() {
-  local issue="$1" states="$2"
+  local issue="$1" states="$2" since="${3:-}"
   # Plain PR mentions (e.g. batch work deliberately not auto-closing issues) are not `linked:pr`.
   # shellcheck disable=SC2016 # GraphQL variables must reach the API unexpanded.
   gh api graphql --paginate -f owner="${GH_REPO%/*}" -f repo="${GH_REPO#*/}" -F number="$issue" \
@@ -17,13 +17,13 @@ referenced_prs() {
               ... on CrossReferencedEvent {
                 isCrossRepository
                 willCloseTarget
-                source { __typename ... on PullRequest { number state body } }
+                source { __typename ... on PullRequest { number state body createdAt } }
               }
             }
           }
         }
       }
-    }' | jq -sr --arg issue "$issue" --arg repo "$GH_REPO" --arg states "$states" '
+    }' | jq -sr --arg issue "$issue" --arg repo "$GH_REPO" --arg states "$states" --arg since "$since" '
       ($repo | gsub("[.]"; "[.]")) as $repository |
       ("(^|[^A-Za-z0-9_/.-])(#|" + $repository + "#|https://github[.]com/" +
         $repository + "/issues/)" + $issue + "([^0-9]|$)") as $reference |
@@ -31,6 +31,7 @@ referenced_prs() {
       | select(.isCrossRepository == false and .source.__typename == "PullRequest")
       | select(.willCloseTarget or ((.source.body // "") | test($reference)))
       | .source | select(.state | test($states))
+      | select($since == "" or .createdAt >= $since)
       | "#\(.number)"] | unique | join(", ")'
 }
 
@@ -49,7 +50,12 @@ assigned=$(gh api --paginate "repos/$GH_REPO/issues?state=open&per_page=100" | j
     . == "copilot" or . == "copilot-swe-agent" or . == "copilot-swe-agent[bot]")) | .number')
 while read -r issue <&3; do
   [[ -n "$issue" ]] || continue
-  prs=$(referenced_prs "$issue" '^(OPEN|MERGED|CLOSED)$')
+  since=$(gh api --paginate "repos/$GH_REPO/issues/$issue/events?per_page=100" | jq -sr '
+    [.[][] | select(.event == "assigned") |
+      select((.assignee.login | ascii_downcase) |
+        . == "copilot" or . == "copilot-swe-agent" or . == "copilot-swe-agent[bot]") |
+      .created_at] | max // error("Copilot assignment event is not visible; retry the queue")')
+  prs=$(referenced_prs "$issue" '^(OPEN|MERGED|CLOSED)$' "$since")
   if [[ -z "$prs" ]]; then
     echo "Copilot is assigned #$issue and has not opened a PR; not starting another." | tee -a "$GITHUB_STEP_SUMMARY"
     exit 0
