@@ -1,29 +1,24 @@
 name: Assign ready issues to Copilot
 
-# Software factory trigger: an open issue labelled `ready-for-agent` is handed to the Copilot coding
-# agent, which works on it and opens a PR. Adding the label assigns at once. The daily run is a
-# backstop that assigns the oldest labelled issue Copilot is not on yet, and only while Copilot has
-# no open PR, so the queue drains one issue at a time. Human assignees do not block either path.
+# Drain one eligible issue at a time when readiness or completion changes, without polling.
 
 on:
   issues:
-    types: [labeled]
-  schedule:
-    - cron: "43 7 * * *"
+    types: [opened, labeled, unlabeled, reopened, closed, unassigned]
+  # Use the trusted base workflow and script, including when a PR is closed without merging.
+  pull_request_target:
+    types: [closed]
   workflow_dispatch:
 
 concurrency:
-  # Per issue: a single shared group would drop all but one pending run when several are labelled.
-  group: ${{ github.workflow }}-${{ github.event.issue.number || 'queue' }}
+  # Coalesce events: every surviving run scans the full live queue.
+  group: ${{ github.workflow }}-queue
   cancel-in-progress: false
 
 permissions: {}
 
 jobs:
   assign:
-    if: >-
-      github.event_name != 'issues' ||
-      (github.event.label.name == 'ready-for-agent' && github.event.issue.state == 'open')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -40,5 +35,4 @@ jobs:
           # this repo's Actions, Contents, Issues and Pull requests.
           GH_TOKEN: ${{ secrets.COPILOT_ASSIGN_TOKEN }}
           GH_REPO: ${{ github.repository }}
-          LABELLED_ISSUE: ${{ github.event.issue.number }}
         run: bash bin/assign-copilot

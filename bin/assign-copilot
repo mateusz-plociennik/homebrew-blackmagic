@@ -1,37 +1,13 @@
 #!/bin/bash
-# Both factory triggers share the same live eligibility and PR-reference checks.
+# Every trigger scans the live queue; events are wake-ups, not assignment commands.
 set -euo pipefail
 : "${GH_REPO:?}" "${GH_TOKEN:?COPILOT_ASSIGN_TOKEN is required}" "${GITHUB_STEP_SUMMARY:?}"
 
-issues="${LABELLED_ISSUE:-}"
-if [[ -z "$issues" ]]; then
-  busy=$(gh pr list --state open --search "author:app/copilot-swe-agent" --json number --jq length)
-  if (( busy > 0 )); then
-    echo "Copilot has $busy open PR(s); not starting another." | tee -a "$GITHUB_STEP_SUMMARY"
-    exit 0
-  fi
-  issues=$(gh issue list --state open --limit 1000 \
-    --search "label:ready-for-agent -label:backlog -assignee:copilot-swe-agent[bot] -linked:pr sort:created-asc" \
-    --json number --jq '.[].number')
-fi
-
-while read -r issue <&3; do
-  [[ -n "$issue" ]] || continue
-  # Re-read state: the label event or search index may be stale.
-  eligible=$(gh issue view "$issue" --json state,labels,assignees | jq '
-    .state == "OPEN" and
-    any(.labels[]; .name == "ready-for-agent") and
-    all(.labels[]; .name != "backlog") and
-    all(.assignees[]; (.login | ascii_downcase) as $login |
-      $login != "copilot" and $login != "copilot-swe-agent" and $login != "copilot-swe-agent[bot]")')
-  if [[ "$eligible" != true ]]; then
-    echo "#$issue: no longer eligible." | tee -a "$GITHUB_STEP_SUMMARY"
-    continue
-  fi
-
+referenced_prs() {
+  local issue="$1" states="$2"
   # Plain PR mentions (e.g. batch work deliberately not auto-closing issues) are not `linked:pr`.
   # shellcheck disable=SC2016 # GraphQL variables must reach the API unexpanded.
-  prs=$(gh api graphql --paginate -f owner="${GH_REPO%/*}" -f repo="${GH_REPO#*/}" -F number="$issue" \
+  gh api graphql --paginate -f owner="${GH_REPO%/*}" -f repo="${GH_REPO#*/}" -F number="$issue" \
     -f query='query($owner: String!, $repo: String!, $number: Int!, $endCursor: String) {
       repository(owner: $owner, name: $repo) {
         issue(number: $number) {
@@ -47,15 +23,64 @@ while read -r issue <&3; do
           }
         }
       }
-    }' | jq -sr --arg issue "$issue" --arg repo "$GH_REPO" '
+    }' | jq -sr --arg issue "$issue" --arg repo "$GH_REPO" --arg states "$states" '
       ($repo | gsub("[.]"; "[.]")) as $repository |
       ("(^|[^A-Za-z0-9_/.-])(#|" + $repository + "#|https://github[.]com/" +
         $repository + "/issues/)" + $issue + "([^0-9]|$)") as $reference |
       [.[].data.repository.issue.timelineItems.nodes[]
       | select(.isCrossRepository == false and .source.__typename == "PullRequest")
       | select(.willCloseTarget or ((.source.body // "") | test($reference)))
-      | .source | select(.state == "OPEN" or .state == "MERGED")
-      | "#\(.number)"] | unique | join(", ")')
+      | .source | select(.state | test($states))
+      | "#\(.number)"] | unique | join(", ")'
+}
+
+busy=$(gh pr list --state open --limit 1000 --json author --jq '
+  [.[] | select(.author.login == "app/copilot-swe-agent" or
+    .author.login == "copilot-swe-agent[bot]")] | length')
+if (( busy > 0 )); then
+  echo "Copilot has $busy open PR(s); not starting another." | tee -a "$GITHUB_STEP_SUMMARY"
+  exit 0
+fi
+
+# Assignment starts a session before its PR exists. Reserve that slot across successive events.
+assigned=$(gh api --paginate "repos/$GH_REPO/issues?state=open&per_page=100" | jq -r '
+  .[] | select(has("pull_request") | not) |
+  select(any(.assignees[]; (.login | ascii_downcase) |
+    . == "copilot" or . == "copilot-swe-agent" or . == "copilot-swe-agent[bot]")) | .number')
+while read -r issue <&3; do
+  [[ -n "$issue" ]] || continue
+  prs=$(referenced_prs "$issue" '^(OPEN|MERGED|CLOSED)$')
+  if [[ -z "$prs" ]]; then
+    echo "Copilot is assigned #$issue and has not opened a PR; not starting another." | tee -a "$GITHUB_STEP_SUMMARY"
+    exit 0
+  fi
+done 3<<<"$assigned"
+
+# List directly rather than through the search index, which can lag a readiness event.
+issues=$(gh issue list --state open --limit 1000 --label ready-for-agent \
+  --json number,createdAt --jq 'sort_by(.createdAt) | .[].number')
+
+while read -r issue <&3; do
+  [[ -n "$issue" ]] || continue
+  eligible=$(gh issue view "$issue" --json state,labels,assignees | jq '
+    .state == "OPEN" and
+    any(.labels[]; .name == "ready-for-agent") and
+    all(.labels[]; .name != "backlog") and
+    all(.assignees[]; (.login | ascii_downcase) as $login |
+      $login != "copilot" and $login != "copilot-swe-agent" and $login != "copilot-swe-agent[bot]")')
+  if [[ "$eligible" != true ]]; then
+    echo "#$issue: no longer eligible." | tee -a "$GITHUB_STEP_SUMMARY"
+    continue
+  fi
+
+  blockers=$(gh api --paginate "repos/$GH_REPO/issues/$issue/dependencies/blocked_by?per_page=100" \
+    | jq -sr '[.[][] | select(.state != "closed") | "#\(.number)"] | join(", ")')
+  if [[ -n "$blockers" ]]; then
+    echo "#$issue: waiting for blocker(s): $blockers." | tee -a "$GITHUB_STEP_SUMMARY"
+    continue
+  fi
+
+  prs=$(referenced_prs "$issue" '^(OPEN|MERGED)$')
   if [[ -n "$prs" ]]; then
     echo "#$issue: skipping; already referenced by open/merged PR(s): $prs." | tee -a "$GITHUB_STEP_SUMMARY"
     continue
