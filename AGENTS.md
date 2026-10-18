@@ -66,3 +66,17 @@ the macOS install from an issue's completion gate. Leave that box unchecked; the
 PR's `ci.yml` `install` job does it on macOS. If a download fails for size or
 firewall reasons, say so in the PR with the blocked host or the `df -h` output
 rather than working around it, and run `brew cleanup -s` after large fetches.
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in this repo's GitHub Issues via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `GLOSSARY.md` and `docs/adr/`. See `docs/agents/domain.md`.
