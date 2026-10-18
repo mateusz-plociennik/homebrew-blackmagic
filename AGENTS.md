@@ -39,9 +39,23 @@ cask the PR changes. See the
 ## Copilot coding agent
 
 Issues reach the Copilot coding agent through the software factory in
-`.github/workflows/copilot-issue.yml`: labelling an open issue `ready-for-agent`
-assigns it to Copilot, and a daily run assigns the oldest waiting one whenever
-Copilot has no open PR. `.github/workflows/copilot-setup-steps.yml` prepares the
+`.github/workflows/copilot-issue.yml`: readiness changes and issue/PR closures
+wake a shared serial queue, with no cron. It assigns the oldest eligible
+`ready-for-agent` issue only when Copilot has no open PR or assignment awaiting
+its first PR since the latest assignment, including retries. Native GitHub
+blockers must be closed; `backlog`, existing Copilot
+assignees, and open/merged implementation PR references prevent assignment.
+Human assignees do not reserve the queue. Gated work and merged work awaiting
+evidence stay in `backlog`, not `ready-for-agent`. A closed unmerged PR releases
+the queue slot, but retrying its issue requires removing and re-adding Copilot.
+If a session stops before opening a PR, remove its ready label and Copilot
+assignee to release the reservation. Manual workflow dispatch rescans the queue.
+
+For an assigned issue or approved implementation spec, read and follow
+`.github/skills/implement/SKILL.md` before starting. This is the cloud-compatible
+repository skill; editor plugin slash-command namespaces are not inherited.
+
+`.github/workflows/copilot-setup-steps.yml` prepares the
 runner: Homebrew is installed, the hooks are enabled and `bin/verify` has
 already passed once.
 
