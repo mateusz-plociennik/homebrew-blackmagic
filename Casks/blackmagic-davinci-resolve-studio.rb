@@ -23,10 +23,14 @@ cask "blackmagic-davinci-resolve-studio" do
 
   pkg "Install Resolve #{version}.pkg"
 
-  # Same uninstall policy and receipt map as `blackmagic-davinci-resolve.rb`, which explains both.
-  # Studio's own receipts are `Manifest` and `ManifestPlugin` instead of `ManifestLite`, and its
-  # vendor script deletes the full Proxy Generator and the OFX renderer, not Proxy Generator Lite.
-  # `FairlightDriver` and `BlackmagicRaw_resolve` receipts stay on purpose.
+  # Same uninstall policy and receipt map as `blackmagic-davinci-resolve.rb`, which explains both;
+  # checked against the Studio 21.1.1 pkg and its own `Uninstall Resolve.app` script. Differences:
+  # - Studio's own receipts are `Manifest` (Resolve, the full Proxy Generator, the Advanced Panel
+  #   daemon) and `ManifestPlugin` (the OFX renderer) instead of `ManifestLite`.
+  # - Its vendor script deletes `Blackmagic Proxy Generator.app` and the OFX renderer, not
+  #   Proxy Generator Lite.
+  # Staging and nested receipts are the same, and `FairlightDriver` and `BlackmagicRaw_resolve`
+  # receipts stay on purpose. Re-check both when bumping.
   uninstall launchctl: "com.blackmagic-design.DaVinciResolveBMDPanelDaemon",
             pkgutil:   [
               "^com\\.blackmagic-design\\.DaVinciKeyboards$",

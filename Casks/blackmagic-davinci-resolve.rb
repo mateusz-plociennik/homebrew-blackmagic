@@ -49,13 +49,15 @@ cask "blackmagic-davinci-resolve" do
   #   a path the vendor script still spells `DaVinci Resolve Panels/AdminUtility`.
   # - `FairlightDriver` (Fairlight Audio Accelerator kext) and `BlackmagicRaw_resolve`
   #   (`/Applications/Blackmagic RAW/*.app`): the vendor script keeps both, because Fairlight Live,
-  #   Camera and RAW Player rely on them. Their receipts stay, so whatever owns them later can still
-  #   remove them. `pkgutil` uninstalls are not reference-counted: uninstalling `BlackmagicRaw_resolve`
-  #   would gut the RAW apps that Camera installs under its own receipt.
+  #   Camera and RAW Player rely on them, so their receipts stay. `pkgutil` uninstalls are not
+  #   reference-counted: uninstalling `BlackmagicRaw_resolve` would gut the RAW apps that Camera
+  #   installs under its own receipt. The driver's postinstall moves `CrystalDriver.kext` into
+  #   `/Library/Extensions`, outside any receipt, so it stays either way.
   #
   # `/Applications/DaVinci Resolve` goes whole, as the vendor script does, even though Fairlight Live
-  # keeps `Fairlight Studio Utility.app` there. Reinstalling either product restores it, and
-  # `brew upgrade` reinstalls straight away.
+  # keeps `Fairlight Studio Utility.app` there and `FairlightDriver` keeps
+  # `Uninstall Fairlight Audio Accelerator.app` there. Reinstalling Resolve or Fairlight Live restores
+  # both, and `brew upgrade` reinstalls straight away.
   #
   # Two-way door: for receipt-only cleanup instead, drop `delete:` and `rmdir:` and the three panel
   # receipts. That keeps co-installed Fairlight Live intact but leaves panels and empty folders behind.
