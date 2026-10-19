@@ -36,6 +36,8 @@ Some casks install a full vendor bundle:
 
 - `blackmagic-camera` also installs the Blackmagic RAW tools and plug-ins.
 - `blackmagic-cintel` also installs Desktop Video drivers, Media Express and Disk Speed Test.
+- `blackmagic-decklink` installs legacy Intel drivers and utilities, and conflicts with
+  `blackmagic-cintel` because the vendor installer and uninstaller remove shared components.
 - `blackmagic-davinci-resolve` and `blackmagic-davinci-resolve-studio` also install control panel
   support, the Fairlight Audio Accelerator driver and the Blackmagic RAW Player.
 
@@ -44,6 +46,10 @@ shared components that other Blackmagic products use. If this occurs, install th
 again. Items that the vendor uninstaller keeps, for example the Blackmagic RAW Player, stay installed
 and keep their package receipts. The cask files contain notes that tell you how to change this
 policy.
+
+DeckLink 7.9.4 requires an Intel Mac running macOS 10.6.5 or later. Its package contains a separate
+licence agreement; anonymous downloading does not waive the vendor's software licence or activation
+requirements.
 
 ## Registration details
 
