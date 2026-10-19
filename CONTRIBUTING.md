@@ -71,6 +71,20 @@ requests.
    receipt comparison does not find this problem. Refer to the notes in
    [`blackmagic-davinci-resolve.rb`](Casks/blackmagic-davinci-resolve.rb).
 
+### Uninstall policy
+
+The generated `uninstall` stanza removes only the package receipts. If the product has a vendor
+uninstaller, change the stanza:
+
+- Remove the same items as the vendor uninstaller. If the vendor uninstaller is a script, run it
+  with `uninstall script:`. If the vendor uninstaller cannot run unattended, copy its steps into
+  `launchctl:`, `delete:` and `rmdir:`.
+- Keep the receipts correct. Remove a receipt when the uninstall removes its files. Keep a receipt
+  when the vendor uninstaller keeps its files.
+- Write a note in the cask. The note tells how to change to receipt-only cleanup.
+
+If the uninstall keeps receipts on purpose, add the cask to `SKIP_CASKS` in `ci.yml`.
+
 To list the Blackmagic products that have no cask and no skip reason, run:
 
 ```sh
@@ -112,10 +126,11 @@ Work is in GitHub Issues. Each issue shows its blocking issues.
 | `backlog` | The issue is blocked or deferred. The Copilot queue ignores it. |
 | `wontfix` | No work will occur. |
 
-The Copilot queue assigns one issue at a time:
+The Copilot queue runs up to `COPILOT_MAX_PARALLEL` issues at once (set in `copilot-issue.yml`; currently 4):
 
-- It selects the oldest open `ready-for-agent` issue that has no open blockers.
-- It waits while Copilot has an open pull request or an assignment with no pull request.
+- It selects the oldest open `ready-for-agent` issues that have no open blockers.
+- Each open Copilot pull request and each Copilot assignment with no pull request uses one slot.
+  The queue waits while every slot is in use.
 - It ignores issues with the `backlog` label, a Copilot assignee, or a linked implementation pull
   request.
 

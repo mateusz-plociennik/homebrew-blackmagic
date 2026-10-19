@@ -37,11 +37,12 @@ SH
 def assign_copilot(issues: [44], busy: 0, state: "OPEN", labels: ["ready-for-agent"],
                    assignee: "mateusz-plociennik", references: [[]], timelines: {},
                    assigned: [], blockers: [], blocker_pages: nil,
-                   assignment_events: nil,
+                   assignment_events: nil, max_parallel: nil,
                    api_fails: false, rest_fails: false, dependencies_fail: false, assign_fails: false)
   Dir.mktmpdir do |dir|
     File.write("#{dir}/gh", ASSIGN_STUB_GH)
     File.chmod(0755, "#{dir}/gh")
+    File.write("#{dir}/log", "")
     File.write("#{dir}/busy", busy.to_s)
     File.write("#{dir}/issues", issues.join("\n"))
     File.write("#{dir}/assigned", assigned.map do |number|
@@ -67,6 +68,7 @@ def assign_copilot(issues: [44], busy: 0, state: "OPEN", labels: ["ready-for-age
       "PATH" => "#{dir}:#{ENV.fetch("PATH")}", "FIXTURES" => dir, "GH_REPO" => "o/r", "GH_TOKEN" => "test",
       "GITHUB_STEP_SUMMARY" => "#{dir}/summary"
     }
+    env["COPILOT_MAX_PARALLEL"] = max_parallel.to_s if max_parallel
     output, status = Open3.capture2e(env, "bash", ASSIGN_SCRIPT)
     calls = File.readlines("#{dir}/log", chomp: true)
     [status.success?, calls.grep(/^issue edit/).map { |call| call.split[2] }, output]
@@ -140,6 +142,32 @@ end
 check("a busy Copilot blocks every queue trigger") do
   ok, assigned = assign_copilot(busy: 1)
   ok && assigned.empty?
+end
+
+check("free parallel slots are filled oldest first, up to the limit") do
+  ok, assigned = assign_copilot(issues: [44, 57, 58, 59], busy: 1, max_parallel: 3)
+  ok && assigned == ["44", "57"]
+end
+
+check("assignments still waiting for a PR use parallel slots") do
+  ok, assigned = assign_copilot(issues: [44, 57], assigned: [62], max_parallel: 2)
+  ok && assigned == ["44"]
+end
+
+check("a full set of parallel slots blocks assignment") do
+  ok, assigned = assign_copilot(busy: 1, assigned: [62], max_parallel: 2)
+  ok && assigned.empty?
+end
+
+check("an invalid parallel limit fails without assigning") do
+  ok, assigned = assign_copilot(max_parallel: "0")
+  !ok && assigned.empty?
+end
+
+check("the workflow sets a parallel limit") do
+  workflow = YAML.load_file(File.expand_path("../.github/workflows/copilot-issue.yml", __dir__))
+  workflow.fetch("jobs").fetch("assign").fetch("steps").last.fetch("env")
+          .fetch("COPILOT_MAX_PARALLEL").to_s.match?(/\A[1-9][0-9]*\z/)
 end
 
 check("a failed reference lookup fails closed without assigning") do

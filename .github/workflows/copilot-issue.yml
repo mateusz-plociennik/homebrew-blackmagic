@@ -1,6 +1,6 @@
 name: Assign ready issues to Copilot
 
-# Drain one eligible issue at a time when readiness or completion changes, without polling.
+# Fill up to COPILOT_MAX_PARALLEL Copilot slots when readiness or completion changes, without polling.
 
 on:
   issues:
@@ -35,4 +35,6 @@ jobs:
           # this repo's Actions, Contents, Issues and Pull requests.
           GH_TOKEN: ${{ secrets.COPILOT_ASSIGN_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          # Open Copilot PRs plus sessions that have not opened one yet.
+          COPILOT_MAX_PARALLEL: 4
         run: bash bin/assign-copilot

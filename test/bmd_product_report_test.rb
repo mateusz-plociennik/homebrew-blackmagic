@@ -62,6 +62,15 @@ check("products with casks are not reported as missing") do
   BmdProductReport.missing(releases, Set["Blackmagic Ethernet Switch", "Blackmagic Camera"]).empty?
 end
 
+check("the committed Resolve casks cover both editions, which are distinct catalog products") do
+  releases = [
+    sample_release("DaVinci Resolve 21.1 Update", registration: true),
+    sample_release("DaVinci Resolve Studio 21.1.1 Update"),
+  ]
+  casks = BmdProductReport.existing_products(File.expand_path("../Casks", __dir__))
+  BmdProductReport.missing(releases, casks).empty?
+end
+
 check("products that should never get casks are hidden by the skip-list") do
   BmdProductReport.missing([sample_release("Blackmagic RAW SDK 3.5")], Set.new).empty?
 end
