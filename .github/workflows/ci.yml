@@ -93,7 +93,9 @@ jobs:
       # Cintel: its uninstall script deactivates a driver extension, which waits for user approval.
       # Resolve Studio: uninstall deliberately keeps the Fairlight driver and RAW Player receipts, as
       # Blackmagic's uninstaller does, so receipt equality cannot hold.
-      SKIP_CASKS: blackmagic-davinci-resolve blackmagic-davinci-resolve-studio blackmagic-cintel
+      # eGPU: its package-bundled license requires explicit human acceptance.
+      SKIP_CASKS: >-
+        blackmagic-davinci-resolve blackmagic-davinci-resolve-studio blackmagic-cintel blackmagic-egpu
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
