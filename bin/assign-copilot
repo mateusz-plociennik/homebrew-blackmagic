@@ -35,11 +35,14 @@ referenced_prs() {
       | "#\(.number)"] | unique | join(", ")'
 }
 
+max_parallel="${COPILOT_MAX_PARALLEL:-1}"
+[[ "$max_parallel" =~ ^[1-9][0-9]*$ ]] || { echo "COPILOT_MAX_PARALLEL must be a positive integer" >&2; exit 1; }
+
 busy=$(gh pr list --state open --limit 1000 --json author --jq '
   [.[] | select(.author.login == "app/copilot-swe-agent" or
     .author.login == "copilot-swe-agent[bot]")] | length')
-if (( busy > 0 )); then
-  echo "Copilot has $busy open PR(s); not starting another." | tee -a "$GITHUB_STEP_SUMMARY"
+if (( busy >= max_parallel )); then
+  echo "Copilot has $busy open PR(s) (limit $max_parallel); not starting another." | tee -a "$GITHUB_STEP_SUMMARY"
   exit 0
 fi
 
@@ -57,8 +60,12 @@ while read -r issue <&3; do
       .created_at] | max // error("Copilot assignment event is not visible; retry the queue")')
   prs=$(referenced_prs "$issue" '^(OPEN|MERGED|CLOSED)$' "$since")
   if [[ -z "$prs" ]]; then
-    echo "Copilot is assigned #$issue and has not opened a PR; not starting another." | tee -a "$GITHUB_STEP_SUMMARY"
-    exit 0
+    busy=$((busy + 1))
+    echo "Copilot is assigned #$issue and has not opened a PR yet." | tee -a "$GITHUB_STEP_SUMMARY"
+    if (( busy >= max_parallel )); then
+      echo "Copilot has $busy session(s) in flight (limit $max_parallel); not starting another." | tee -a "$GITHUB_STEP_SUMMARY"
+      exit 0
+    fi
   fi
 done 3<<<"$assigned"
 
@@ -94,7 +101,11 @@ while read -r issue <&3; do
 
   gh issue edit "$issue" --add-assignee "@copilot"
   echo "Assigned #$issue to Copilot." | tee -a "$GITHUB_STEP_SUMMARY"
-  exit 0
+  busy=$((busy + 1))
+  if (( busy >= max_parallel )); then
+    echo "Copilot now has $busy session(s) in flight (limit $max_parallel)." | tee -a "$GITHUB_STEP_SUMMARY"
+    exit 0
+  fi
 done 3<<<"$issues"
 
-echo "No eligible ready-for-agent issue waiting." | tee -a "$GITHUB_STEP_SUMMARY"
+echo "No more eligible ready-for-agent issues waiting." | tee -a "$GITHUB_STEP_SUMMARY"
