@@ -52,9 +52,9 @@ how to change this policy.
 
 Most Blackmagic downloads are anonymous. You can install them with no configuration. DaVinci Resolve
 Studio is an anonymous download, but you must have a licence to activate it.
-The SmartView installer includes a separate Blackmagic Design License Agreement; review its terms and
-satisfy any applicable licensing, fee, or activation requirements. An anonymous download does not
-waive those requirements.
+Blackmagic's catalog currently lists SmartView 5.0.4 as an anonymous download with no separate
+download-terms gate. Its installer includes a separate Blackmagic Design License Agreement; review
+its terms and satisfy any applicable licensing, fee, or activation requirements.
 
 Some downloads, for example the free edition of DaVinci Resolve, are available only after
 registration. For these downloads, write your registration details in

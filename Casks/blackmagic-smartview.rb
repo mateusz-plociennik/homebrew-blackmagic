@@ -35,7 +35,8 @@ cask "blackmagic-smartview" do
             ]
 
   caveats do
-    "The installer includes a Blackmagic Design License Agreement. Review its terms and satisfy any " \
-      "applicable licensing, fee, or activation requirements; anonymous downloading does not waive them."
+    "The current SmartView release downloads anonymously without a separate download-terms opt-in. " \
+      "The installer includes a Blackmagic Design License Agreement; review its terms and satisfy " \
+      "any applicable licensing, fee, or activation requirements."
   end
 end
