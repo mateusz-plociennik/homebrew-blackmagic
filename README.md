@@ -38,17 +38,23 @@ Some casks install a full vendor bundle:
 - `blackmagic-cintel` also installs Desktop Video drivers, Media Express and Disk Speed Test.
 - `blackmagic-davinci-resolve` and `blackmagic-davinci-resolve-studio` also install control panel
   support, the Fairlight Audio Accelerator driver and the Blackmagic RAW Player.
+- `blackmagic-smartview` removes only its application and application-support directories and its
+  three exact package receipts. It does not run the vendor uninstaller, which forgets a broad,
+  case-insensitive SmartView receipt prefix.
 
-These casks remove the same items as the vendor uninstaller. The vendor uninstaller can remove
-shared components that other Blackmagic products use. If this occurs, install the affected products
-again. Items that the vendor uninstaller keeps, for example the Blackmagic RAW Player, stay installed
-and keep their package receipts. The cask files contain notes that tell you how to change this
-policy.
+Where a cask invokes a vendor uninstaller, it removes the same items as that script. Vendor
+uninstallers can remove shared components that other Blackmagic products use. If this occurs, install
+the affected products again. Items that the vendor uninstaller keeps, for example the Blackmagic RAW
+Player, stay installed and keep their package receipts. The cask files contain notes that tell you
+how to change this policy.
 
 ## Registration details
 
 Most Blackmagic downloads are anonymous. You can install them with no configuration. DaVinci Resolve
 Studio is an anonymous download, but you must have a licence to activate it.
+Blackmagic's catalog currently lists SmartView 5.0.4 as an anonymous download with no separate
+download-terms gate. Its installer includes a separate Blackmagic Design License Agreement; review
+its terms and satisfy any applicable licensing, fee, or activation requirements.
 
 Some downloads, for example the free edition of DaVinci Resolve, are available only after
 registration. For these downloads, write your registration details in
