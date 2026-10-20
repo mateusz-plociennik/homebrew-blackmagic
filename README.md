@@ -94,8 +94,10 @@ these steps:
 4. Run `brew install` again.
 
 The tap reads this key only from the config file. No environment variable sets it. The tap tells
-Blackmagic that you accept the licence, so you must accept it deliberately. At this time, no cask
-in this tap uses a licence agreement.
+Blackmagic that you accept the licence, so you must accept it deliberately. This opt-in covers
+catalog download terms only; a product installer can include its own licence agreement. Ultimatte's
+cask documents its bundled agreement in a caveat. At this time, no cask in this tap is gated by
+catalog download terms.
 
 ## Updates
 
