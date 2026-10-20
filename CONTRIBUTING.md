@@ -126,11 +126,9 @@ Work is in GitHub Issues. Each issue shows its blocking issues.
 | `backlog` | The issue is blocked or deferred. The Copilot queue ignores it. |
 | `wontfix` | No work will occur. |
 
-The Copilot queue runs up to `COPILOT_MAX_PARALLEL` issues at once (set in `copilot-issue.yml`; currently 4):
+The Copilot queue assigns every eligible issue at once, oldest first:
 
-- It selects the oldest open `ready-for-agent` issues that have no open blockers.
-- Each open Copilot pull request and each Copilot assignment with no pull request uses one slot.
-  The queue waits while every slot is in use.
+- It selects open `ready-for-agent` issues that have no open blockers. There is no concurrency limit.
 - It ignores issues with the `backlog` label, a Copilot assignee, or a linked implementation pull
   request.
 
