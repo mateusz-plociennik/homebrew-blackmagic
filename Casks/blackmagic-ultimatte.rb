@@ -38,9 +38,10 @@ cask "blackmagic-ultimatte" do
 
   caveats do
     <<~EOS
-      The installer includes a Blackmagic Ultimatte license agreement. Read and accept it before installing.
-      An anonymous catalog download does not grant a software license or waive applicable fees or activation
-      requirements.
+      The current catalog does not require registration or acceptance of separate download terms. The
+      installer includes a Blackmagic Ultimatte license agreement; read and accept it before installing.
+      The agreement makes use subject to applicable license fees. The release notes do not describe
+      activation requirements, so check your entitlement with Blackmagic.
 
       After installation, connect the Ultimatte by USB and run Ultimatte Setup to update its internal software.
     EOS
