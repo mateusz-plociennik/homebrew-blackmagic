@@ -44,12 +44,39 @@ check("Cintel removes both orphaned helper jobs, plists and the privileged helpe
   ]
 end
 
+egpu = Cask::CaskLoader.load(File.read(File.expand_path("../Casks/blackmagic-egpu.rb", __dir__)))
+egpu_pkg = egpu.artifacts.grep(Cask::Artifact::Pkg).fetch(0)
+egpu_uninstall = egpu.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
+egpu_preflight = egpu.artifacts.grep(Cask::Artifact::PreflightSteps).fetch(0).steps.fetch(0)
+
+check("eGPU installs the nested firmware updater package") do
+  egpu_pkg.summarize == "Blackmagic eGPU/Blackmagic eGPU Firmware Updater.pkg"
+end
+
+check("eGPU uninstall forgets only its exact firmware receipt") do
+  egpu_uninstall.fetch(:pkgutil) == "^com\\.blackmagic-design\\.Blackmagic_eGPU_Firmware$"
+end
+
+check("eGPU uninstall removes both firmware blobs and preserves the shared plist") do
+  egpu_uninstall.fetch(:delete) == [
+    "/Library/ThunderboltAccessoryFirmwareUpdates/BlackmagicDesign/Blackmagic_eGPU_Pro_Thunderbolt.bin",
+    "/Library/ThunderboltAccessoryFirmwareUpdates/BlackmagicDesign/Blackmagic_eGPU_Thunderbolt.bin",
+  ]
+end
+
+check("eGPU preflight requires a product-specific license marker") do
+  guard = egpu_preflight.fetch("guards").fetch(0)
+  guard.fetch("condition") == "unless_exists" && guard.fetch("base") == "home" &&
+    guard.fetch("path") == ".config/bmd-tap/agree-to-egpu-license" &&
+    egpu_preflight.fetch("args").last.include?("installer license")
+end
+
 casks = Dir[File.expand_path("../Casks/*.rb", __dir__)].map do |path|
   [File.basename(path), Cask::CaskLoader.load(File.read(path))]
 end
 
 check("pkgutil receipt cleanup uses explicit anchored package ids") do
-  exact_receipt = /\A\^com\\\.blackmagic-design\\\.[A-Za-z0-9-]+\$\z/
+  exact_receipt = /\A\^com\\\.blackmagic-design\\\.[A-Za-z0-9_-]+\$\z/
   bad_patterns = casks.flat_map do |file, cask|
     uninstall_artifact = cask.artifacts.grep(Cask::Artifact::Uninstall).first
     pkgutil = uninstall_artifact&.directives&.fetch(:pkgutil, nil)
