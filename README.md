@@ -95,7 +95,11 @@ these steps:
 
 The tap reads this key only from the config file. No environment variable sets it. The tap tells
 Blackmagic that you accept the licence, so you must accept it deliberately. At this time, no cask
-in this tap uses a licence agreement.
+in this tap uses a download-time licence agreement.
+
+Some installers present their own licence agreements, which you must review and accept yourself.
+For example, Control for Arduino's anonymous download does not grant a software licence or bypass any
+applicable licensing or activation requirements.
 
 ## Updates
 
