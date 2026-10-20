@@ -23,8 +23,8 @@ cask "blackmagic-ultimatte" do
 
   pkg "Install Ultimatte #{version}.pkg"
 
-  # Blackmagic's script removes the product-owned app directory. The SmartRemote plug-in is in an
-  # Ultimatte-specific support directory; forget only these four receipts, none shared with another cask.
+  # Blackmagic's script removes the product-owned app directory but leaves the SmartRemote plug-in;
+  # remove its Ultimatte-specific directory, then forget only these four receipts.
   uninstall script:  {
               executable: "Uninstall Ultimatte.app/Contents/Resources/uninstall.sh",
               sudo:       true,
@@ -34,7 +34,8 @@ cask "blackmagic-ultimatte" do
               "^com\\.blackmagic-design\\.Ultimatte$",
               "^com\\.blackmagic-design\\.UltimatteAssets$",
               "^com\\.blackmagic-design\\.UltimatteUninstaller$",
-            ]
+            ],
+            delete:  "/Library/Application Support/Blackmagic Design/Ultimatte/AdminUtility/PlugIns/SmartRemote"
 
   caveats do
     <<~EOS
