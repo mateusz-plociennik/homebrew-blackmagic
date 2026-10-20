@@ -44,6 +44,29 @@ check("Cintel removes both orphaned helper jobs, plists and the privileged helpe
   ]
 end
 
+desktop_video = Cask::CaskLoader.load(File.read(File.expand_path("../Casks/blackmagic-desktop-video.rb", __dir__)))
+desktop_video_uninstall = desktop_video.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
+
+check("Desktop Video invokes both vendor scripts with the staged resources") do
+  resources = "#{desktop_video.staged_path}/Uninstall Desktop Video.app/Contents/Resources"
+  early_script = desktop_video_uninstall.fetch(:early_script)
+  script = desktop_video_uninstall.fetch(:script)
+  early_script.fetch(:executable) == "Uninstall Desktop Video.app/Contents/Resources/uninstall_uid_root.sh" &&
+    early_script.fetch(:args) == ["", resources] && early_script.fetch(:sudo) &&
+    script.fetch(:executable) == "Uninstall Desktop Video.app/Contents/Resources/uninstall.sh" &&
+    script.fetch(:args) == ["", resources] && script.fetch(:sudo)
+end
+
+check("Desktop Video forgets only the five exact 16.4 installer receipts") do
+  desktop_video_uninstall.fetch(:pkgutil) == [
+    "^com\\.blackmagic-design\\.DesktopVideo$",
+    "^com\\.blackmagic-design\\.DesktopVideoAssets$",
+    "^com\\.blackmagic-design\\.DesktopVideoUninstaller$",
+    "^com\\.blackmagic-design\\.DiskSpeedTest$",
+    "^com\\.blackmagic-design\\.MediaExpress$",
+  ]
+end
+
 casks = Dir[File.expand_path("../Casks/*.rb", __dir__)].map do |path|
   [File.basename(path), Cask::CaskLoader.load(File.read(path))]
 end

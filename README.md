@@ -35,7 +35,10 @@ brew uninstall --cask blackmagic-audio-monitor
 Some casks install a full vendor bundle:
 
 - `blackmagic-camera` also installs the Blackmagic RAW tools and plug-ins.
-- `blackmagic-cintel` also installs Desktop Video drivers, Media Express and Disk Speed Test.
+- `blackmagic-desktop-video` and `blackmagic-cintel` install shared Desktop Video drivers, Media
+  Express and Disk Speed Test. The Desktop Video vendor uninstaller also removes shared Streaming
+  support. Reinstall Cintel or Streaming after uninstalling a product that removes components they
+  use.
 - `blackmagic-davinci-resolve` and `blackmagic-davinci-resolve-studio` also install control panel
   support, the Fairlight Audio Accelerator driver and the Blackmagic RAW Player.
 
