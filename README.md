@@ -38,6 +38,9 @@ Some casks install a full vendor bundle:
 - `blackmagic-cintel` also installs Desktop Video drivers, Media Express and Disk Speed Test.
 - `blackmagic-davinci-resolve` and `blackmagic-davinci-resolve-studio` also install control panel
   support, the Fairlight Audio Accelerator driver and the Blackmagic RAW Player.
+- `blackmagic-ultrascope` runs the vendor uninstaller to remove its app, drivers and support files,
+  and forgets only its `UltraScope`, `UltraScopeAssets` and `UltraScopeUninstaller` receipts. It
+  removes the system login hook only when it still points to UltraScope's own script.
 
 These casks remove the same items as the vendor uninstaller. The vendor uninstaller can remove
 shared components that other Blackmagic products use. If this occurs, install the affected products
@@ -49,6 +52,10 @@ policy.
 
 Most Blackmagic downloads are anonymous. You can install them with no configuration. DaVinci Resolve
 Studio is an anonymous download, but you must have a licence to activate it.
+
+UltraScope also downloads anonymously and has no catalog registration or terms gate, but it requires
+compatible Blackmagic UltraScope hardware. Anonymous download access does not grant a software licence
+or bypass any applicable activation requirement.
 
 Some downloads, for example the free edition of DaVinci Resolve, are available only after
 registration. For these downloads, write your registration details in
