@@ -44,6 +44,35 @@ check("Cintel removes both orphaned helper jobs, plists and the privileged helpe
   ]
 end
 
+multibridge = Cask::CaskLoader.load(File.read(File.expand_path("../Casks/blackmagic-multibridge.rb", __dir__)))
+multibridge_uninstall = multibridge.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
+multibridge_pkg = multibridge.artifacts.grep(Cask::Artifact::Pkg).fetch(0)
+
+check("Multibridge excludes Apple's codec and targets its seven exact package receipts") do
+  multibridge_pkg.stanza_options.fetch(:choices) == [
+    {
+      "choiceIdentifier" => "choice21",
+      "choiceAttribute"  => "selected",
+      "attributeSetting" => 0,
+    },
+  ] && multibridge_uninstall.fetch(:pkgutil) == [
+    "^com\\.blackmagic-design\\.BlackmagicDeckLinkApplications$",
+    "^com\\.blackmagic-design\\.BlackmagicDeckLinkCodec$",
+    "^com\\.blackmagic-design\\.BlackmagicDeckLinkDriver$",
+    "^com\\.blackmagic-design\\.BlackmagicDeckLinkFinalCutProSupport$",
+    "^com\\.blackmagic-design\\.BlackmagicDecklinkLaunchDaemons$",
+    "^com\\.blackmagic-design\\.BlackmagicDeckLinkPreferencePanes$",
+    "^com\\.blackmagic-design\\.BlackmagicDeckLinkSupport$",
+  ] && multibridge_uninstall.fetch(:script).fetch(:args) == ["Multibridge"] &&
+    multibridge_uninstall.fetch(:launchctl) == "com.blackmagic-design.DeckLinkStartup"
+end
+
+check("Multibridge conflicts with Cintel and DeckLink shared components") do
+  multibridge.conflicts_with.to_h.fetch(:cask).include?("blackmagic-cintel") &&
+    multibridge.conflicts_with.to_h.fetch(:cask).include?("blackmagic-decklink") &&
+    cintel.conflicts_with.to_h.fetch(:cask).include?("blackmagic-multibridge")
+end
+
 casks = Dir[File.expand_path("../Casks/*.rb", __dir__)].map do |path|
   [File.basename(path), Cask::CaskLoader.load(File.read(path))]
 end
