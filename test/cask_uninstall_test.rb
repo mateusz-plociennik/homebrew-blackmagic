@@ -73,4 +73,22 @@ check("pkgutil receipt cleanup avoids wildcard or grouped regex stanzas") do
   broad_patterns.empty? || raise(broad_patterns.join(", "))
 end
 
+teranex = casks.find { |file, _cask| file == "blackmagic-teranex.rb" }&.last
+
+check("Teranex uninstalls its four bundled receipts without the vendor's broad receipt wildcard") do
+  next false unless teranex
+
+  directives = teranex.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
+  directives.fetch(:quit) == "com.blackmagic-design.teranex.utility" &&
+    directives.fetch(:script).fetch(:executable) ==
+      "Uninstall Teranex.app/Contents/Resources/uninstall_uid_root.sh" &&
+    directives.fetch(:script).fetch(:sudo) &&
+    directives.fetch(:pkgutil) == [
+      "^com\\.blackmagic-design\\.Teranex$",
+      "^com\\.blackmagic-design\\.TeranexAssets$",
+      "^com\\.blackmagic-design\\.TeranexMini$",
+      "^com\\.blackmagic-design\\.TeranexUninstaller$",
+    ]
+end
+
 report_failures!
