@@ -73,4 +73,29 @@ check("pkgutil receipt cleanup avoids wildcard or grouped regex stanzas") do
   broad_patterns.empty? || raise(broad_patterns.join(", "))
 end
 
+ultrascope = casks.find { |file, _| file == "blackmagic-ultrascope.rb" }.last
+ultrascope_uninstall = ultrascope.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
+ultrascope_postflight = ultrascope.artifacts.grep(Cask::Artifact::UninstallPostflightSteps).fetch(0).steps
+
+check("UltraScope runs its installed uninstaller and forgets only its exact receipts") do
+  ultrascope_uninstall.fetch(:script).fetch(:executable) ==
+    "/Applications/Blackmagic UltraScope/Uninstall UltraScope.app/Contents/Resources/uninstall.sh" &&
+    ultrascope_uninstall.fetch(:script).fetch(:sudo) &&
+    ultrascope_uninstall.fetch(:pkgutil) == [
+      "^com\\.blackmagic-design\\.UltraScope$",
+      "^com\\.blackmagic-design\\.UltraScopeAssets$",
+      "^com\\.blackmagic-design\\.UltraScopeUninstaller$",
+    ]
+end
+
+check("UltraScope removes only its own system login hook") do
+  args = ultrascope_postflight.fetch(0).fetch("args")
+  command = args.fetch(1)
+  command.include?(
+    "if [ \"$hook\" = '/Library/Application\\ Support/Blackmagic\\ Design/" \
+    "Blackmagic\\ UltraScope/UltraScopeLoginItem.sh' ]",
+  ) &&
+    command.include?("/usr/bin/defaults delete com.apple.loginwindow LoginHook")
+end
+
 report_failures!
