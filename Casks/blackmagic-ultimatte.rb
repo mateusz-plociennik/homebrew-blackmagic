@@ -25,6 +25,7 @@ cask "blackmagic-ultimatte" do
 
   # Blackmagic's script removes the product-owned app directory but leaves the SmartRemote plug-in;
   # remove its Ultimatte-specific directory, then forget only these four receipts.
+  # Remove the `script:` and `delete:` directives below to revert to receipt-only cleanup.
   uninstall script:  {
               executable: "Uninstall Ultimatte.app/Contents/Resources/uninstall.sh",
               sudo:       true,
