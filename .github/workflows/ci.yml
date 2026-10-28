@@ -93,7 +93,19 @@ jobs:
     # What the offline checks cannot prove about a new release: that its `pkg` name still matches, and
     # that `uninstall pkgutil:` removes every receipt it writes. Downloads the artifact, so PRs only.
     if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
-    runs-on: macos-latest
+    # `macos-latest` is Apple silicon, where an Intel-only cask refuses to install. Each runner installs
+    # only the casks it can, so every cask is installed exactly once. The Apple silicon entry keeps
+    # the name `install`, which the `main` ruleset requires.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: install
+            runner: macos-latest
+          - name: install-intel
+            runner: macos-15-intel
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
     env:
       # Resolve: same reason as `audit-online.yml`, registration-path casks need a real identity.
       # Cintel: its uninstall script deactivates a driver extension, which waits for user approval.
@@ -142,6 +154,13 @@ jobs:
             case " $SKIP_CASKS " in
               *" $cask "*) echo "::notice::Skipping $cask: cannot install unattended, install it locally"; continue ;;
             esac
+            # Read through Homebrew, which normalises `arch: :intel` and `arch: :x86_64` alike.
+            intel_only=$(brew info --cask --json=v2 "$TAP/$cask" |
+                           jq '[.casks[0].depends_on.arch[]?.type] | . == ["intel"]') || intel_only=false
+            if [[ "$intel_only" != "$([[ $(uname -m) == x86_64 ]] && echo true || echo false)" ]]; then
+              echo "Leaving $cask to the other install runner"
+              continue
+            fi
             echo "::group::$cask"
             # Outside any `if`, so a failing pkgutil stops the step instead of reading as no receipts.
             pkgutil --pkgs > "$snapshots/before"
