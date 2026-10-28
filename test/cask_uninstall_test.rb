@@ -73,4 +73,18 @@ check("pkgutil receipt cleanup avoids wildcard or grouped regex stanzas") do
   broad_patterns.empty? || raise(broad_patterns.join(", "))
 end
 
+smartview = Cask::CaskLoader.load(File.read(File.expand_path("../Casks/blackmagic-smartview.rb", __dir__)))
+smartview_uninstall = smartview.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
+
+check("SmartView removes only its exact receipts and product-owned directories") do
+  smartview_uninstall.fetch(:pkgutil) == [
+    "^com\\.blackmagic-design\\.SmartView$",
+    "^com\\.blackmagic-design\\.SmartViewAssets$",
+    "^com\\.blackmagic-design\\.SmartViewUninstaller$",
+  ] && smartview_uninstall.fetch(:delete) == [
+    "/Applications/Blackmagic SmartView",
+    "/Library/Application Support/Blackmagic Design/Blackmagic SmartView",
+  ] && !smartview_uninstall.key?(:script)
+end
+
 report_failures!
