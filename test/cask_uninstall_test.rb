@@ -67,6 +67,17 @@ check("Desktop Video forgets only the five exact 16.4 installer receipts") do
   ]
 end
 
+check("Desktop Video removes both orphaned helper jobs, plists and the privileged helper") do
+  desktop_video_uninstall.fetch(:launchctl) == [
+    "com.blackmagic-design.desktopvideo.helper",
+    "com.blackmagic-design.DesktopVideoDriverExtension.Helper",
+  ] && desktop_video_uninstall.fetch(:delete) == [
+    "/Library/LaunchDaemons/com.blackmagic-design.DesktopVideoDriverExtension.Helper.plist",
+    "/Library/LaunchDaemons/com.blackmagic-design.DesktopVideoHelper.plist",
+    "/Library/PrivilegedHelperTools/com.blackmagic-design.DesktopVideoDriverExtension.Helper",
+  ]
+end
+
 casks = Dir[File.expand_path("../Casks/*.rb", __dir__)].map do |path|
   [File.basename(path), Cask::CaskLoader.load(File.read(path))]
 end

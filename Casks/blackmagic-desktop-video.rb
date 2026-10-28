@@ -25,12 +25,17 @@ cask "blackmagic-desktop-video" do
   # The vendor scripts deactivate the driver extension and remove payloads shared with Cintel and
   # Streaming. They also clear legacy receipts; reinstall products that share those files afterward.
   # Keep Homebrew's receipt list to the five exact IDs in the 16.4 installer.
+  # Vendor cleanup leaves the DesktopVideoHelper job and files created by driver deactivation.
   # To retain shared payloads instead, remove both scripts and the receipt patterns.
   uninstall early_script: {
               executable: "Uninstall Desktop Video.app/Contents/Resources/uninstall_uid_root.sh",
               args:       ["", "#{staged_path}/Uninstall Desktop Video.app/Contents/Resources"],
               sudo:       true,
             },
+            launchctl:    [
+              "com.blackmagic-design.desktopvideo.helper",
+              "com.blackmagic-design.DesktopVideoDriverExtension.Helper",
+            ],
             script:       {
               executable: "Uninstall Desktop Video.app/Contents/Resources/uninstall.sh",
               args:       ["", "#{staged_path}/Uninstall Desktop Video.app/Contents/Resources"],
@@ -42,5 +47,10 @@ cask "blackmagic-desktop-video" do
               "^com\\.blackmagic-design\\.DesktopVideoUninstaller$",
               "^com\\.blackmagic-design\\.DiskSpeedTest$",
               "^com\\.blackmagic-design\\.MediaExpress$",
+            ],
+            delete:       [
+              "/Library/LaunchDaemons/com.blackmagic-design.DesktopVideoDriverExtension.Helper.plist",
+              "/Library/LaunchDaemons/com.blackmagic-design.DesktopVideoHelper.plist",
+              "/Library/PrivilegedHelperTools/com.blackmagic-design.DesktopVideoDriverExtension.Helper",
             ]
 end
