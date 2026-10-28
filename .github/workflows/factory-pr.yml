@@ -28,7 +28,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       actions: write
-      contents: read
+      # Only for `gh pr ready`: markPullRequestReadyForReview needs Contents write (cli/cli#8910).
+      # The script never pushes.
+      contents: write
       issues: write
       pull-requests: write
     steps:
@@ -43,7 +45,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           # Copilot only acts on `@copilot` comments from a Copilot-licensed user with write access;
-          # the same PAT `copilot-issue.yml` assigns with. Used for those comments and for taking Copilot
-          # PRs out of draft, which GITHUB_TOKEN may not do.
+          # the same PAT `copilot-issue.yml` assigns with. Used for those comments and nothing else.
           COPILOT_TOKEN: ${{ secrets.COPILOT_ASSIGN_TOKEN }}
         run: bash bin/factory-pr
