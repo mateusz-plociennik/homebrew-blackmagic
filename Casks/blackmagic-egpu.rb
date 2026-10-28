@@ -32,10 +32,15 @@ cask "blackmagic-egpu" do
     end
   end
 
+  uninstall_postflight_steps do
+    if_path_exists "/var/db/receipts/com.blackmagic-design.Blackmagic_eGPU_Firmware.plist" do
+      run "/usr/sbin/pkgutil", args: ["--forget", "com.blackmagic-design.Blackmagic_eGPU_Firmware"], sudo: true
+    end
+  end
+
   # Remove the two firmware payloads, but keep the shared plist that describes both eGPU models.
-  uninstall pkgutil: "^com\\.blackmagic-design\\.Blackmagic_eGPU_Firmware$",
-            delete:  [
-              "/Library/ThunderboltAccessoryFirmwareUpdates/BlackmagicDesign/Blackmagic_eGPU_Pro_Thunderbolt.bin",
-              "/Library/ThunderboltAccessoryFirmwareUpdates/BlackmagicDesign/Blackmagic_eGPU_Thunderbolt.bin",
-            ]
+  uninstall delete: [
+    "/Library/ThunderboltAccessoryFirmwareUpdates/BlackmagicDesign/Blackmagic_eGPU_Pro_Thunderbolt.bin",
+    "/Library/ThunderboltAccessoryFirmwareUpdates/BlackmagicDesign/Blackmagic_eGPU_Thunderbolt.bin",
+  ]
 end

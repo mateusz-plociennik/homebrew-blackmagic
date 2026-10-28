@@ -99,8 +99,7 @@ jobs:
       # Cintel: its uninstall script deactivates a driver extension, which waits for user approval.
       # Resolve Studio: uninstall deliberately keeps the Fairlight driver and RAW Player receipts, as
       # Blackmagic's uninstaller does, so receipt equality cannot hold.
-      # eGPU: its package-bundled license requires explicit human acceptance.
-      SKIP_CASKS: blackmagic-davinci-resolve blackmagic-davinci-resolve-studio blackmagic-cintel blackmagic-egpu
+      SKIP_CASKS: blackmagic-davinci-resolve blackmagic-davinci-resolve-studio blackmagic-cintel
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
@@ -144,6 +143,11 @@ jobs:
               *" $cask "*) echo "::notice::Skipping $cask: cannot install unattended, install it locally"; continue ;;
             esac
             echo "::group::$cask"
+            if [ "$cask" = blackmagic-egpu ]; then
+              marker="$HOME/.config/bmd-tap/agree-to-egpu-license"
+              mkdir -p "$(dirname "$marker")"
+              touch "$marker"
+            fi
             # Outside any `if`, so a failing pkgutil stops the step instead of reading as no receipts.
             pkgutil --pkgs > "$snapshots/before"
             if brew install --cask "$TAP/$cask" && brew uninstall --cask "$TAP/$cask"; then
@@ -154,6 +158,9 @@ jobs:
               fi
             else
               failed="$failed $cask"
+            fi
+            if [ "$cask" = blackmagic-egpu ]; then
+              rm -f "$marker"
             fi
             echo "::endgroup::"
           done
