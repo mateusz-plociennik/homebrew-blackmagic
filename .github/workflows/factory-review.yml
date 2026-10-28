@@ -1,0 +1,179 @@
+name: Factory review
+
+# The factory's cold reviewer: a Copilot CLI session that reads one PR's diff against its ticket and
+# this repo's rules, and returns pass / fail / human. Dispatched by `bin/factory-pr` once CI is green
+# on the head commit; the run name is how that script finds runs for a PR and commit.
+#
+# The PR is untrusted input, so the jobs are split by privilege:
+#   context: read-only token, collects the diff and ticket text.
+#   review:  no GitHub write access, no shell, no network tools; the agent can only view, grep and glob
+#            inside the workspace. Its only secret is the Copilot token. Prompt and rules come from main.
+#   post:    trusted code turns the validated verdict into a comment-only review with a marker.
+# The review never approves; a human merges.
+
+run-name: "Review #${{ inputs.pr }} at ${{ inputs.sha }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number
+        type: string
+        required: true
+      sha:
+        description: Head commit to review
+        type: string
+        required: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.pr }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  context:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PR: ${{ inputs.pr }}
+      SHA: ${{ inputs.sha }}
+    steps:
+      - name: Collect the PR, its diff and its tickets
+        run: |
+          set -euo pipefail
+          [[ "$PR" =~ ^[0-9]+$ && "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::bad inputs"; exit 1; }
+          mkdir context
+          gh pr view "$PR" --json title,body,headRefOid,closingIssuesReferences > pr.json
+          head=$(jq -r .headRefOid pr.json)
+          [[ "$head" == "$SHA" ]] || { echo "::error::#$PR moved from $SHA to $head; the next factory scan reviews the new head."; exit 1; }
+          jq -r '"# PR #\(env.PR): \(.title)\n\n\(.body)"' pr.json > context/pr.md
+          gh pr diff "$PR" > context/diff.patch
+          # Tickets: the PR's closing references, plus any `#n` the body mentions (factory PRs say "Fixes #n").
+          { jq -r '.closingIssuesReferences[].number' pr.json; jq -r '.body // ""' pr.json | { grep -oE '#[0-9]+' || true; } | tr -d '#'; } |
+            sort -un | head -5 | while read -r n; do
+              gh issue view "$n" --json number,title,body,comments \
+                --jq '"# Issue #\(.number): \(.title)\n\n\(.body)\n\n## Comments\n" + ([.comments[] | "### \(.author.login)\n\(.body)\n"] | join("\n"))' \
+                > "context/issue-$n.md" 2>/dev/null || rm -f "context/issue-$n.md"
+            done
+          ls -la context
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: context
+          path: context/
+          retention-days: 7
+
+  review:
+    needs: context
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out main (prompt and rules)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: trusted
+          persist-credentials: false
+
+      - name: Check out the PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+          path: workspace/pr
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: context
+          path: workspace/context
+
+      - name: Add the rules from main
+        run: |
+          set -euo pipefail
+          mkdir -p workspace/rules
+          cp trusted/AGENTS.md trusted/CONTRIBUTING.md trusted/docs/agents/domain.md workspace/rules/
+          # The PR may edit these; the reviewer must not take instructions from its own subject.
+          rm -rf workspace/pr/.git workspace/pr/.github/copilot-instructions.md
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Copilot CLI
+        run: npm install -g @github/copilot@1.0.104
+
+      - name: Review
+        working-directory: workspace
+        env:
+          # Fine-grained PAT with only the "Copilot Requests" permission. Nothing else reaches this job.
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_REVIEW_TOKEN }}
+        run: |
+          set -euo pipefail
+          [[ -n "$COPILOT_GITHUB_TOKEN" ]] || { echo "::error::COPILOT_REVIEW_TOKEN is not set; see CONTRIBUTING.md"; exit 1; }
+          # view/grep/glob only: no shell, no web, no writes, no MCP, no repo instruction files.
+          copilot -p "$(cat ../trusted/.github/factory/review-prompt.md)" \
+            --silent --no-ask-user --no-custom-instructions --disable-builtin-mcps \
+            --disallow-temp-dir --no-auto-update \
+            --available-tools view grep glob --allow-all-tools \
+            > ../response.txt
+          # The answer is the last JSON object in the response; validate its shape before anything uses it.
+          jq -Rs 'capture("(?s)(?<j>\\{.*\\})").j | fromjson' ../response.txt > ../verdict.json || true
+          jq -e '
+            (.verdict | IN("pass", "fail", "human"))
+            and (.summary | type == "string")
+            and (.findings | type == "array" and all(.[]; (.path | type == "string") and (.body | type == "string")))
+            and (.human_checks | type == "array" and all(.[]; type == "string"))
+          ' ../verdict.json > /dev/null || { echo "::error::no valid verdict"; cat ../response.txt; exit 1; }
+          jq . ../verdict.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verdict
+          path: verdict.json
+          retention-days: 7
+
+  post:
+    needs: review
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PR: ${{ inputs.pr }}
+      SHA: ${{ inputs.sha }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: verdict
+
+      - name: Post a comment-only review
+        run: |
+          set -euo pipefail
+          # Model text is quoted into the body; strip comment openers so it cannot forge a marker.
+          jq --arg sha "$SHA" '
+            def clean: gsub("<!--"; "<!‐-");
+            {
+              commit_id: $sha,
+              event: "COMMENT",
+              body: (
+                "## Factory review: \({pass: "PASS", fail: "CHANGES NEEDED", human: "HUMAN CHECKS NEEDED"}[.verdict])\n\n"
+                + (.summary | clean)
+                + (if (.findings | length) > 0 then "\n\n### Findings\n" + ([.findings[] | "- `\(.path | clean)\(if .line then ":\(.line)" else "" end)`: \(.body | clean)"] | join("\n")) else "" end)
+                + (if (.human_checks | length) > 0 then "\n\n### Human-only checks\n" + ([.human_checks[] | "- [ ] \(clean)"] | join("\n")) else "" end)
+                + "\n\n<!-- factory-review sha=\($sha) verdict=\(.verdict) -->"
+              )
+            }' verdict.json > review.json
+          gh api --method POST "repos/$GH_REPO/pulls/$PR/reviews" --input review.json > /dev/null
+
+      - name: Wake the factory loop
+        run: gh workflow run factory-pr.yml --ref main

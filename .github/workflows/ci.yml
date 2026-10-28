@@ -80,6 +80,12 @@ jobs:
       - name: Run the Copilot assignment tests
         run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/assign_copilot_test.rb"
 
+      - name: Run the factory loop tests
+        run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/factory_pr_test.rb"
+
+      - name: Run the bump and run-report tests
+        run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/bump_casks_test.rb"
+
       - name: Run the changed-casks tests
         run: bash "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/changed_casks_test.sh"
 
