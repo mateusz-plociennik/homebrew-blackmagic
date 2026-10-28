@@ -44,6 +44,30 @@ check("Cintel removes both orphaned helper jobs, plists and the privileged helpe
   ]
 end
 
+hyperdeck = Cask::CaskLoader.load(File.read(File.expand_path("../Casks/blackmagic-hyperdeck.rb", __dir__)))
+hyperdeck_uninstall = hyperdeck.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
+
+check("HyperDeck forgets only its three exact package receipts") do
+  hyperdeck_uninstall.fetch(:pkgutil) == [
+    "^com\\.blackmagic-design\\.HyperDeck$",
+    "^com\\.blackmagic-design\\.HyperDeckAssets$",
+    "^com\\.blackmagic-design\\.HyperDeckUninstaller$",
+  ]
+end
+
+check("HyperDeck removes only its app, support files, and copied Avid templates") do
+  hyperdeck_uninstall.fetch(:delete) == [
+    "/Applications/Avid Media Composer/SupportingFiles/Machine_Templates/" \
+    "Blackmagic Design HyperDeck 24P.txt",
+    "/Applications/Avid Media Composer/SupportingFiles/Machine_Templates/" \
+    "Blackmagic Design HyperDeck NTSC.txt",
+    "/Applications/Avid Media Composer/SupportingFiles/Machine_Templates/" \
+    "Blackmagic Design HyperDeck PAL.txt",
+    "/Applications/Blackmagic HyperDeck",
+    "/Library/Application Support/Blackmagic Design/HyperDeck",
+  ]
+end
+
 casks = Dir[File.expand_path("../Casks/*.rb", __dir__)].map do |path|
   [File.basename(path), Cask::CaskLoader.load(File.read(path))]
 end
