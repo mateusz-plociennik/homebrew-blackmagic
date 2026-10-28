@@ -87,7 +87,8 @@ jobs:
     # What the offline checks cannot prove about a new release: that its `pkg` name still matches, and
     # that `uninstall pkgutil:` removes every receipt it writes. Downloads the artifact, so PRs only.
     if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
-    runs-on: macos-latest
+    # `macos-latest` is arm64; legacy x86_64 casks need an Intel runner.
+    runs-on: macos-15-intel
     env:
       # Resolve: same reason as `audit-online.yml`, registration-path casks need a real identity.
       # Cintel: its uninstall script deactivates a driver extension, which waits for user approval.
