@@ -176,7 +176,9 @@ handoff() {
   local pr="$1" verdict="$2" state="$3" sha
   sha=$(jq -r .sha <<<"$state")
   if [[ "$verdict" == pass ]]; then
-    [[ $(jq -r .draft <<<"$state") != true ]] || gh pr ready "$pr" >/dev/null || return 1
+    # GITHUB_TOKEN may not take a Copilot-authored PR out of draft ("Resource not accessible by
+    # integration"), so this uses the same user PAT as the rework comments.
+    [[ $(jq -r .draft <<<"$state") != true ]] || GH_TOKEN="$COPILOT_TOKEN" gh pr ready "$pr" >/dev/null || return 1
     gh pr edit "$pr" --add-label ready-for-human >/dev/null || return 1
     printf '@%s CI is green and the factory review passed on %s. Ready for your review and merge.\n\n<!-- factory-handoff sha=%s verdict=pass -->\n' \
       "$owner" "$sha" "$sha" | comment "$pr"

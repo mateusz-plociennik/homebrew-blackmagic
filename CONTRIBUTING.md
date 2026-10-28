@@ -143,8 +143,10 @@ The loop never approves or merges. To see the next step for each pull request wi
 
 Secrets:
 
-- `COPILOT_ASSIGN_TOKEN`: a PAT of a Copilot-licensed user with write access. It assigns issues and
-  posts the `@copilot` comments. Copilot ignores comments from `GITHUB_TOKEN`.
+- `COPILOT_ASSIGN_TOKEN`: a PAT of a Copilot-licensed user with read and write access to Issues and
+  Pull requests. It assigns issues, posts the `@copilot` comments, and takes Copilot pull requests out
+  of draft. Copilot ignores comments from `GITHUB_TOKEN`, and `GITHUB_TOKEN` cannot mark a Copilot pull
+  request ready.
 - `COPILOT_REVIEW_TOKEN`: a fine-grained PAT with only the **Copilot Requests** permission and no
   repository access. Only the review step can read it.
 

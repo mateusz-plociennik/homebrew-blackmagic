@@ -218,10 +218,10 @@ check("failed review: the rework quotes the findings without the marker") do
     comments.include?("reason=review -->")
 end
 
-check("passing review on a draft: marked ready, labelled, owner pinged, marker left") do
+check("passing review on a draft: marked ready with the PAT, labelled, owner pinged, marker left") do
   view = pr_view(1, reviews: [review("github-actions", verdict("pass"))])
   ok, calls, comments = scan(prs: [copilot_pr(1)], views: [view], ci_runs: { SHA => GREEN_CI })
-  ok && calls.any? { |c| c.include?("pr ready 1") } &&
+  ok && calls.any? { |c| c.include?("token=pat pr ready 1") } &&
     calls.any? { |c| c.include?("pr edit 1 --add-label ready-for-human") } &&
     comments.include?("--- comment by actions-token\n@owner ") &&
     comments.include?("<!-- factory-handoff sha=#{SHA} verdict=pass -->")
