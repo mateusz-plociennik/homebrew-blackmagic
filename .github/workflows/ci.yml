@@ -4,8 +4,8 @@ on:
   # No `push` on main: every change lands via a PR that already ran this, and direct pushes are
   # gated by `.githooks/pre-commit` running `bin/verify`.
   pull_request:
-  # `bump.yml` dispatches this for each bump PR it opens: a PR authored by `GITHUB_TOKEN` fires no
-  # `pull_request` run, but `workflow_dispatch` is exempt from that rule.
+  # `bump.yml` dispatches this for each bump PR it opens: a PR authored by `GITHUB_TOKEN` only gets a
+  # `pull_request` run that waits for manual approval, but `workflow_dispatch` is exempt from that rule.
   workflow_dispatch:
     inputs:
       pr:
@@ -79,6 +79,12 @@ jobs:
 
       - name: Run the Copilot assignment tests
         run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/assign_copilot_test.rb"
+
+      - name: Run the factory loop tests
+        run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/factory_pr_test.rb"
+
+      - name: Run the bump and run-report tests
+        run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/bump_casks_test.rb"
 
       - name: Run the changed-casks tests
         run: bash "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/changed_casks_test.sh"
