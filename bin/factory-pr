@@ -1,0 +1,252 @@
+#!/bin/bash
+# Moves every open factory PR one step between the Copilot implementer and the factory reviewer, then
+# hands it to a human. Factory PRs: authored by Copilot coding agent, `bump-*` branches, or labelled
+# `agent:review`. Like `bin/assign-copilot`, every trigger rescans the live state; events are wake-ups.
+#
+# The loop never approves or merges. Per PR, at most one step per scan, decided from GitHub alone:
+#   Copilot working / CI running / review running / rework requested on this commit -> wait
+#   merge conflict, red CI, failed review                -> `@copilot` rework comment (one round)
+#   no CI on the head commit                            -> dispatch ci.yml (the PR's own `pull_request`
+#                                                          run waits for approval), unless the PR touches
+#                                                          `.github/`: a dispatched run uses the branch's
+#                                                          workflow files with this repo's secrets
+#   green CI, no review of this commit                  -> dispatch factory-review.yml
+#   review passed                                       -> mark ready, `ready-for-human`, ping the owner
+#   review says human-only checks remain                -> `ready-for-human`, stays draft
+#   rounds exhausted, Copilot silent or answering without a push, CI or reviewer won't run
+#                                                       -> `agent:blocked` with the reason
+# Removing `agent:blocked` resumes the PR with a fresh round budget.
+#
+# State lives in hidden markers. Only markers by github-actions or the rework token's user count, so
+# text Copilot or the reviewer writes cannot fake a verdict.
+#
+# Usage: bin/factory-pr            scan and act (needs GH_REPO, gh auth, COPILOT_TOKEN)
+#        bin/factory-pr --dry-run  scan and print each PR's next step without acting
+#        bin/factory-pr decide     read one PR state JSON on stdin, print the next step
+set -euo pipefail
+
+MAX_ROUNDS=${FACTORY_MAX_ROUNDS:-3}
+STALL_SECONDS=${FACTORY_STALL_SECONDS:-21600}
+
+# Pure: PR state in, "<step> <reason>" out. Rounds and attempts only count since the last block, so
+# a human unblocking a PR gives it a fresh budget.
+read -r -d '' DECIDE <<'JQ' || true
+. as $s
+| ($s.last_block_at // 0) as $since
+| [$s.reworks[] | select(.at > $since)] as $rw
+| [$rw[] | select(.sha == $s.sha)] as $rw_here
+| [$s.reviews[] | select(.sha == $s.sha)] | last as $review
+| [$s.ci_runs[] | select(.conclusion != "action_required")] as $ci
+| (if ($ci | any(.status != "completed")) then "pending"
+   else ([$ci[] | select(.conclusion != "cancelled")] | sort_by(.at) | last) as $run
+   | if $run == null then "none"
+     elif ($run.conclusion | IN("success", "neutral", "skipped")) then "success"
+     else "failure" end
+   end) as $ci_state
+| ([$ci[] | select(.conclusion == "cancelled" and .at > $since)] | length) as $ci_cancelled
+| ($s.review_runs | any(.status != "completed")) as $review_running
+| ([$s.review_runs[] | select(.status == "completed" and .at > $since)] | length) as $review_attempts
+| def rework($why): if ($rw | length) >= $max then "block rounds" else "rework \($why)" end;
+if ($s.labels | index("agent:blocked")) then "skip blocked"
+elif $s.copilot_working then "wait copilot"
+elif $s.handoff_sha == $s.sha then "skip handed-off"
+elif ($rw_here | length) > 0 then
+  (if ($s.copilot_finished_at // 0) > ($rw_here | last | .at) then "block disputed"
+   elif $s.now - ($rw_here | last | .at) > $stall then "block stalled"
+   else "wait rework" end)
+elif $s.mergeable == "CONFLICTING" then rework("conflict")
+elif $ci_state == "none" then
+  (if $s.workflow_changed then "block workflow-change"
+   elif $ci_cancelled >= 3 then "block ci-not-starting"
+   else "dispatch-ci -" end)
+elif $ci_state == "pending" then "wait ci"
+elif $ci_state == "failure" then rework("ci")
+elif $review == null then
+  (if $review_running then "wait review"
+   elif $review_attempts >= 2 then "block reviewer-failing"
+   else "review -" end)
+elif $review.verdict == "pass" then "handoff pass"
+elif $review.verdict == "human" then "handoff human"
+else rework("review") end
+JQ
+
+decide() { jq -r --argjson max "$MAX_ROUNDS" --argjson stall "$STALL_SECONDS" "$DECIDE"; }
+
+if [[ "${1:-}" == decide ]]; then
+  decide
+  exit
+fi
+
+dry_run=false
+if [[ "${1:-}" == --dry-run ]]; then
+  dry_run=true
+  if [[ -z "${COPILOT_TOKEN:-}" ]]; then
+    COPILOT_TOKEN=${GH_TOKEN:-}
+    [[ -n "$COPILOT_TOKEN" ]] || COPILOT_TOKEN=$(gh auth token)
+  fi
+fi
+: "${GH_REPO:?}" "${COPILOT_TOKEN:?COPILOT_ASSIGN_TOKEN is required}"
+summary=${GITHUB_STEP_SUMMARY:-/dev/null}
+owner=${GH_REPO%%/*}
+# Rework comments must come from a Copilot-licensed user with write access, or Copilot ignores them.
+rework_login=$(GH_TOKEN="$COPILOT_TOKEN" gh api user --jq .login)
+now=$(date +%s)
+
+# The `.github` tree hash at a commit; empty when it has none. Fails closed: an API error fails the scan
+# of this PR, so nothing is dispatched.
+github_tree() {
+  local tree
+  tree=$(gh api "repos/$GH_REPO/git/trees/$1") || return 1
+  jq -er '[.tree[] | select(.path == ".github") | .sha] | first // ""' <<<"$tree"
+}
+
+# Gathers everything `decide` reads for one PR into a JSON object.
+# Called as `if ! state=$(pr_state …)`, where `set -e` does not apply: every step returns on failure
+# itself, so a failed API call skips the PR instead of deciding on partial state.
+pr_state() {
+  local pr="$1" view sha base events ci_runs review_runs head_tree base_tree
+  view=$(gh pr view "$pr" --json number,isDraft,headRefName,headRefOid,baseRefName,mergeable,labels,comments,reviews) ||
+    return 1
+  sha=$(jq -r .headRefOid <<<"$view") || return 1
+  # Whole-tree comparison, not the PR's file list: that list stops at 100 files, so padding a PR
+  # with files sorting before `.github/` would hide a workflow change from the CI dispatch guard.
+  base=$(gh api "repos/$GH_REPO/compare/$(jq -r .baseRefName <<<"$view")...$sha" --jq .merge_base_commit.sha) ||
+    return 1
+  head_tree=$(github_tree "$sha") || return 1
+  base_tree=$(github_tree "$base") || return 1
+  events=$(gh api --paginate "repos/$GH_REPO/issues/$pr/timeline?per_page=100" \
+             --jq '.[] | select((.event // "") | startswith("copilot_work")) | "\(.event) \(.created_at)"') || return 1
+  ci_runs=$(gh run list --workflow ci.yml --commit "$sha" --limit 50 --json status,conclusion,createdAt,url \
+              --jq 'map({status, conclusion, url, at: (.createdAt | fromdateiso8601)})') || return 1
+  review_runs=$(jq --arg title "Review #$pr at $sha" \
+                  'map(select(.displayTitle == $title) | {status, conclusion, at: (.createdAt | fromdateiso8601)})' \
+                  <<<"$all_review_runs") || return 1
+  jq -n --argjson v "$view" --arg events "$events" --argjson ci "$ci_runs" --argjson rr "$review_runs" \
+     --arg rework_login "$rework_login" --argjson now "$now" \
+     --argjson workflow_changed "$([[ "$head_tree" == "$base_tree" ]] && echo false || echo true)" '
+    def trusted: .author.login == "github-actions" or .author.login == $rework_login;
+    def marker($kind): [($v.comments[], $v.reviews[]) | select(trusted)
+      | (.createdAt // .submittedAt) as $at | .body as $body
+      # The last marker in a body is the one trusted code wrote; anything before it is quoted text.
+      | ([.body | capture("<!-- factory-\($kind) sha=(?<sha>[0-9a-f]{40})(?<rest>[^>]*)-->"; "g")] | last // empty)
+      | . + {at: ($at | fromdateiso8601), body: $body}] | sort_by(.at);
+    {
+      number: $v.number, draft: $v.isDraft, branch: $v.headRefName, sha: $v.headRefOid,
+      mergeable: $v.mergeable, labels: [$v.labels[].name], workflow_changed: $workflow_changed,
+      copilot_working: (($events | split("\n") | map(select(. != "")) | last // "") | startswith("copilot_work_started ")),
+      copilot_finished_at: ([$events | split("\n")[] | select(startswith("copilot_work_finished"))
+                             | split(" ")[1] | fromdateiso8601] | max),
+      ci_runs: $ci, review_runs: $rr, now: $now,
+      reviews: [marker("review")[] | {sha, at, body, verdict: (.rest | capture("verdict=(?<v>[a-z]+)").v)}],
+      reworks: [marker("rework")[] | {sha, at}],
+      handoff_sha: (marker("handoff") | last | .sha),
+      last_block_at: (marker("blocked") | last | .at)
+    }'
+}
+
+# The action functions run in `&&` context, where `set -e` is off: each step returns on failure, so a
+# marker is only posted once the change it records has been made.
+comment() { gh pr comment "$1" --body-file - >/dev/null; }
+
+remove_label() {
+  local pr="$1" label="$2" state="$3"
+  jq -e --arg l "$label" '.labels | index($l)' <<<"$state" >/dev/null || return 0
+  gh pr edit "$pr" --remove-label "$label" >/dev/null || return 1
+}
+
+rework() {
+  local pr="$1" why="$2" state="$3" sha instruction
+  sha=$(jq -r .sha <<<"$state")
+  case "$why" in
+    conflict) instruction="This branch conflicts with \`main\`. Merge \`main\` into it, resolve the conflicts keeping the intent of both sides, and run \`bin/verify\`." ;;
+    ci)
+      url=$(jq -r '[.ci_runs[] | select(.conclusion != "action_required" and .conclusion != "cancelled")] | sort_by(.at) | last | .url' <<<"$state")
+      instruction="CI failed on $sha: $url. Read the failing job's log, fix the cause (not the test), and run \`bin/verify\`." ;;
+    review)
+      instruction="The factory review of $sha failed. Address every finding below, run \`bin/verify\`, and reply with what you changed. If a finding is wrong, say why instead of changing code.
+
+$(jq -r --arg sha "$sha" '[.reviews[] | select(.sha == $sha)] | last | .body | gsub("<!--[^>]*-->"; "") | split("\n") | map("> " + .) | join("\n")' <<<"$state")" ;;
+  esac
+  remove_label "$pr" ready-for-human "$state" || return 1
+  printf '@copilot %s\n\n<!-- factory-rework sha=%s reason=%s -->\n' "$instruction" "$sha" "$why" |
+    GH_TOKEN="$COPILOT_TOKEN" gh pr comment "$pr" --body-file - >/dev/null
+}
+
+handoff() {
+  local pr="$1" verdict="$2" state="$3" sha
+  sha=$(jq -r .sha <<<"$state")
+  if [[ "$verdict" == pass ]]; then
+    [[ $(jq -r .draft <<<"$state") != true ]] || gh pr ready "$pr" >/dev/null || return 1
+    gh pr edit "$pr" --add-label ready-for-human >/dev/null || return 1
+    printf '@%s CI is green and the factory review passed on %s. Ready for your review and merge.\n\n<!-- factory-handoff sha=%s verdict=pass -->\n' \
+      "$owner" "$sha" "$sha" | comment "$pr"
+  else
+    gh pr edit "$pr" --add-label ready-for-human >/dev/null || return 1
+    printf '@%s CI is green and the factory review found nothing to fix on %s, but it lists checks only a human can do (see the review). Left as draft until they are done.\n\n<!-- factory-handoff sha=%s verdict=human -->\n' \
+      "$owner" "$sha" "$sha" | comment "$pr"
+  fi
+}
+
+block() {
+  local pr="$1" why="$2" state="$3" sha reason
+  sha=$(jq -r .sha <<<"$state")
+  case "$why" in
+    rounds) reason="$MAX_ROUNDS rework rounds did not get this PR through CI and review." ;;
+    stalled) reason="Copilot did not push anything within $((STALL_SECONDS / 3600))h of the last rework request." ;;
+    disputed) reason="Copilot finished the last rework request without pushing; it may have disputed a finding or failed. Read its reply: fix, push, or merge as is." ;;
+    workflow-change) reason="This PR changes \`.github/\`, so the factory will not start CI for it: a dispatched run would execute the branch's workflow files with this repository's secrets. Read the change, then approve its waiting CI run." ;;
+    ci-not-starting) reason="CI on $sha was cancelled 3 times without finishing." ;;
+    reviewer-failing) reason="The factory review of $sha failed twice without a verdict. See the Factory review workflow runs." ;;
+  esac
+  gh pr edit "$pr" --add-label agent:blocked >/dev/null || return 1
+  # shellcheck disable=SC2016 # literal backticks: Markdown code in the comment
+  printf '@%s Factory loop stopped: %s\n\nRemove `agent:blocked` to resume with a fresh round budget.\n\n<!-- factory-blocked sha=%s reason=%s -->\n' \
+    "$owner" "$reason" "$sha" "$why" | comment "$pr"
+}
+
+prs=$(gh pr list --state open --limit 200 --json number,author,headRefName,isCrossRepository,labels --jq '
+  .[] | select(.isCrossRepository | not)
+  | select((.author.login | IN("app/copilot-swe-agent", "copilot-swe-agent", "Copilot"))
+           or (.headRefName | startswith("bump-"))
+           or any(.labels[]; .name == "agent:review"))
+  | .number' | sort -n)
+# Before factory-review.yml reaches the default branch this 404s; a duplicate review dispatch is
+# harmless anyway, since factory-review.yml cancels older runs for the same PR.
+all_review_runs=$(gh run list --workflow factory-review.yml --limit 200 --json status,conclusion,createdAt,displayTitle) ||
+  all_review_runs='[]'
+
+failed=""
+while read -r pr <&3; do
+  [[ -n "$pr" ]] || continue
+  if ! state=$(pr_state "$pr") || ! step=$(decide <<<"$state"); then
+    echo "#$pr: could not read state" | tee -a "$summary"
+    failed="$failed #$pr"
+    continue
+  fi
+  read -r action reason <<<"$step"
+  echo "#$pr: $action $reason" | tee -a "$summary"
+  [[ "$dry_run" == false ]] || continue
+  branch=$(jq -r .branch <<<"$state")
+  sha=$(jq -r .sha <<<"$state")
+  case "$action" in
+    skip | wait) ok=true ;;
+    dispatch-ci)
+      # The dispatch runs the branch tip, not $sha; re-check so a push since the scan, which could
+      # change `.github/`, is not run. The next scan judges the new head.
+      head=$(gh pr view "$pr" --json headRefOid --jq .headRefOid) || head=""
+      if [[ "$head" != "$sha" ]]; then
+        echo "#$pr: head moved since the scan; not dispatching" | tee -a "$summary"
+        ok=true
+      else
+        gh workflow run ci.yml --ref "$branch" -f pr="$pr" && ok=true || ok=false
+      fi ;;
+    review) gh workflow run factory-review.yml --ref main -f pr="$pr" -f sha="$sha" && ok=true || ok=false ;;
+    rework) rework "$pr" "$reason" "$state" && ok=true || ok=false ;;
+    handoff) handoff "$pr" "$reason" "$state" && ok=true || ok=false ;;
+    block) block "$pr" "$reason" "$state" && ok=true || ok=false ;;
+    *) ok=false ;;
+  esac
+  [[ "$ok" == true ]] || failed="$failed #$pr"
+done 3<<<"$prs"
+
+[[ -z "$failed" ]] || { echo "Failed:$failed" | tee -a "$summary"; exit 1; }
