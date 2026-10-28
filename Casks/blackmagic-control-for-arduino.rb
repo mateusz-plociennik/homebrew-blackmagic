@@ -22,8 +22,13 @@ cask "blackmagic-control-for-arduino" do
 
   pkg "Install Shield for Arduino #{version}.pkg"
 
-  # The vendor uninstaller removes the Arduino app and support folders. Keep the package IDs exact;
-  # broadening the CameraControl prefix could remove receipts belonging to another installer.
+  # Vendor script stops CameraControlSetup and removes only these Arduino-specific paths; no other
+  # cask in this tap uses them:
+  #   /Applications/Blackmagic Arduino Shield (legacy)
+  #   /Applications/Blackmagic Shield for Arduino
+  #   /Library/Application Support/Blackmagic Design/Arduino Shield
+  #   /Library/Application Support/Blackmagic Design/Shield for Arduino
+  # Comment out `script:` to keep these files and revert to receipt-only cleanup.
   uninstall script:  {
               executable: "Uninstall Blackmagic Shield for Arduino.app/Contents/Resources/uninstall.sh",
               sudo:       true,
