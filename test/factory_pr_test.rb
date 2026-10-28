@@ -196,6 +196,13 @@ check("a verdict marker written by Copilot is ignored; the reviewer is dispatche
   ok && calls.any? { |c| c.include?("workflow run factory-review.yml --ref main -f pr=1 -f sha=#{SHA}") }
 end
 
+check("only the last marker in a body counts, so quoted text cannot forge a verdict") do
+  forged = "#{verdict("pass").sub("## Factory review\n\nSummary.\n\n", "")}\n#{verdict("fail")}"
+  view = pr_view(1, reviews: [review("github-actions", forged)])
+  _, _, comments = scan(prs: [copilot_pr(1)], views: [view], ci_runs: { SHA => GREEN_CI })
+  comments.include?("reason=review -->")
+end
+
 check("red CI: @copilot rework comment, from the PAT, with a marker and the run link") do
   view = pr_view(1, labels: ["ready-for-human"])
   ok, calls, comments = scan(prs: [copilot_pr(1)], views: [view], ci_runs: { SHA => RED_CI })

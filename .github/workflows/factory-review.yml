@@ -129,7 +129,8 @@ jobs:
           jq -e '
             (.verdict | IN("pass", "fail", "human"))
             and (.summary | type == "string")
-            and (.findings | type == "array" and all(.[]; (.path | type == "string") and (.body | type == "string")))
+            and (.findings | type == "array" and all(.[]; (.path | type == "string") and (.body | type == "string")
+                and (.line == null or (.line | type == "number"))))
             and (.human_checks | type == "array" and all(.[]; type == "string"))
           ' ../verdict.json > /dev/null || { echo "::error::no valid verdict"; cat ../response.txt; exit 1; }
           jq . ../verdict.json
@@ -168,7 +169,7 @@ jobs:
               body: (
                 "## Factory review: \({pass: "PASS", fail: "CHANGES NEEDED", human: "HUMAN CHECKS NEEDED"}[.verdict])\n\n"
                 + (.summary | clean)
-                + (if (.findings | length) > 0 then "\n\n### Findings\n" + ([.findings[] | "- `\(.path | clean)\(if .line then ":\(.line)" else "" end)`: \(.body | clean)"] | join("\n")) else "" end)
+                + (if (.findings | length) > 0 then "\n\n### Findings\n" + ([.findings[] | "- `\(.path | clean)\(if (.line | type) == "number" then ":\(.line | floor)" else "" end)`: \(.body | clean)"] | join("\n")) else "" end)
                 + (if (.human_checks | length) > 0 then "\n\n### Human-only checks\n" + ([.human_checks[] | "- [ ] \(clean)"] | join("\n")) else "" end)
                 + "\n\n<!-- factory-review sha=\($sha) verdict=\(.verdict) -->"
               )

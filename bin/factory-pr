@@ -127,7 +127,8 @@ pr_state() {
     def trusted: .author.login == "github-actions" or .author.login == $rework_login;
     def marker($kind): [($v.comments[], $v.reviews[]) | select(trusted)
       | (.createdAt // .submittedAt) as $at | .body as $body
-      | (.body | capture("<!-- factory-\($kind) sha=(?<sha>[0-9a-f]{40})(?<rest>[^>]*)-->")?)
+      # The last marker in a body is the one trusted code wrote; anything before it is quoted text.
+      | ([.body | capture("<!-- factory-\($kind) sha=(?<sha>[0-9a-f]{40})(?<rest>[^>]*)-->"; "g")] | last // empty)
       | . + {at: ($at | fromdateiso8601), body: $body}] | sort_by(.at);
     {
       number: $v.number, draft: $v.isDraft, branch: $v.headRefName, sha: $v.headRefOid,
