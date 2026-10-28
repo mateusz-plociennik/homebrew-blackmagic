@@ -1,10 +1,10 @@
 #!/bin/bash
-# Every trigger scans the live queue; events are wake-ups, not assignment commands.
+# Every trigger scans the live queue and assigns every eligible issue; events are wake-ups, not commands.
 set -euo pipefail
 : "${GH_REPO:?}" "${GH_TOKEN:?COPILOT_ASSIGN_TOKEN is required}" "${GITHUB_STEP_SUMMARY:?}"
 
 referenced_prs() {
-  local issue="$1" states="$2" since="${3:-}"
+  local issue="$1" states="$2"
   # Plain PR mentions (e.g. batch work deliberately not auto-closing issues) are not `linked:pr`.
   # shellcheck disable=SC2016 # GraphQL variables must reach the API unexpanded.
   gh api graphql --paginate -f owner="${GH_REPO%/*}" -f repo="${GH_REPO#*/}" -F number="$issue" \
@@ -23,7 +23,7 @@ referenced_prs() {
           }
         }
       }
-    }' | jq -sr --arg issue "$issue" --arg repo "$GH_REPO" --arg states "$states" --arg since "$since" '
+    }' | jq -sr --arg issue "$issue" --arg repo "$GH_REPO" --arg states "$states" '
       ($repo | gsub("[.]"; "[.]")) as $repository |
       ("(^|[^A-Za-z0-9_/.-])(#|" + $repository + "#|https://github[.]com/" +
         $repository + "/issues/)" + $issue + "([^0-9]|$)") as $reference |
@@ -31,43 +31,8 @@ referenced_prs() {
       | select(.isCrossRepository == false and .source.__typename == "PullRequest")
       | select(.willCloseTarget or ((.source.body // "") | test($reference)))
       | .source | select(.state | test($states))
-      | select($since == "" or .createdAt >= $since)
       | "#\(.number)"] | unique | join(", ")'
 }
-
-max_parallel="${COPILOT_MAX_PARALLEL:-1}"
-[[ "$max_parallel" =~ ^[1-9][0-9]*$ ]] || { echo "COPILOT_MAX_PARALLEL must be a positive integer" >&2; exit 1; }
-
-busy=$(gh pr list --state open --limit 1000 --json author --jq '
-  [.[] | select(.author.login == "app/copilot-swe-agent" or
-    .author.login == "copilot-swe-agent[bot]")] | length')
-if (( busy >= max_parallel )); then
-  echo "Copilot has $busy open PR(s) (limit $max_parallel); not starting another." | tee -a "$GITHUB_STEP_SUMMARY"
-  exit 0
-fi
-
-# Assignment starts a session before its PR exists. Reserve that slot across successive events.
-assigned=$(gh api --paginate "repos/$GH_REPO/issues?state=open&per_page=100" | jq -r '
-  .[] | select(has("pull_request") | not) |
-  select(any(.assignees[]; (.login | ascii_downcase) |
-    . == "copilot" or . == "copilot-swe-agent" or . == "copilot-swe-agent[bot]")) | .number')
-while read -r issue <&3; do
-  [[ -n "$issue" ]] || continue
-  since=$(gh api --paginate "repos/$GH_REPO/issues/$issue/events?per_page=100" | jq -sr '
-    [.[][] | select(.event == "assigned") |
-      select((.assignee.login | ascii_downcase) |
-        . == "copilot" or . == "copilot-swe-agent" or . == "copilot-swe-agent[bot]") |
-      .created_at] | max // error("Copilot assignment event is not visible; retry the queue")')
-  prs=$(referenced_prs "$issue" '^(OPEN|MERGED|CLOSED)$' "$since")
-  if [[ -z "$prs" ]]; then
-    busy=$((busy + 1))
-    echo "Copilot is assigned #$issue and has not opened a PR yet." | tee -a "$GITHUB_STEP_SUMMARY"
-    if (( busy >= max_parallel )); then
-      echo "Copilot has $busy session(s) in flight (limit $max_parallel); not starting another." | tee -a "$GITHUB_STEP_SUMMARY"
-      exit 0
-    fi
-  fi
-done 3<<<"$assigned"
 
 # List directly rather than through the search index, which can lag a readiness event.
 issues=$(gh issue list --state open --limit 1000 --label ready-for-agent \
@@ -101,11 +66,6 @@ while read -r issue <&3; do
 
   gh issue edit "$issue" --add-assignee "@copilot"
   echo "Assigned #$issue to Copilot." | tee -a "$GITHUB_STEP_SUMMARY"
-  busy=$((busy + 1))
-  if (( busy >= max_parallel )); then
-    echo "Copilot now has $busy session(s) in flight (limit $max_parallel)." | tee -a "$GITHUB_STEP_SUMMARY"
-    exit 0
-  fi
 done 3<<<"$issues"
 
-echo "No more eligible ready-for-agent issues waiting." | tee -a "$GITHUB_STEP_SUMMARY"
+echo "Queue scan complete." | tee -a "$GITHUB_STEP_SUMMARY"
