@@ -23,10 +23,9 @@ cask "blackmagic-ultimatte-12" do
 
   pkg "Install Ultimatte v#{version}.pkg"
 
-  # This Intel-only app needs Rosetta 2 on Apple Silicon. Ultimatte 12 1.0 and the separate
-  # Ultimatte 2.4.1 release share these receipts and /Applications/Blackmagic Ultimatte; they
-  # cannot coexist. The vendor uninstaller removes that shared directory, so reinstall the other
-  # release if needed.
+  # Ultimatte 12 1.0 and the separate Ultimatte 2.4.1 release share these receipts and
+  # /Applications/Blackmagic Ultimatte; they cannot coexist. The vendor uninstaller removes that
+  # shared directory, so reinstall the other release if needed.
   uninstall script:  {
               executable: "Uninstall Ultimatte.app/Contents/Resources/uninstall.sh",
               sudo:       true,
@@ -36,4 +35,8 @@ cask "blackmagic-ultimatte-12" do
               "^com\\.blackmagic-design\\.UltimatteAssets$",
               "^com\\.blackmagic-design\\.UltimatteUninstaller$",
             ]
+
+  caveats do
+    requires_rosetta
+  end
 end

@@ -48,6 +48,10 @@ check("Ultimatte 12 conflicts with the separate Ultimatte release") do
   ultimatte_12.conflicts_with.fetch(:cask).include?("blackmagic-ultimatte")
 end
 
+check("Ultimatte 12 caveats require Rosetta") do
+  ultimatte_12.caveats_object.invoked?(:requires_rosetta)
+end
+
 cintel = Cask::CaskLoader.load(File.read(File.expand_path("../Casks/blackmagic-cintel.rb", __dir__)))
 cintel_uninstall = cintel.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
 
