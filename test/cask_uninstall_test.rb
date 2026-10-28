@@ -75,20 +75,35 @@ end
 
 teranex = casks.find { |file, _cask| file == "blackmagic-teranex.rb" }&.last
 
-check("Teranex uninstalls its four bundled receipts without the vendor's broad receipt wildcard") do
+check("Teranex removes the full bundled payload and all four exact receipts") do
   next false unless teranex
 
   directives = teranex.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
+  delete_targets = directives.fetch(:delete)
+  mini_payload_paths = [
+    "/Library/Application Support/Blackmagic Design/Teranex/AdminUtility/PlugIns/TeranexMini/libTeranexMiniSetup.dylib",
+    "/Library/Application Support/Blackmagic Design/Teranex/AdminUtility/PlugIns/IPVideo/libIPVideoSetup.dylib",
+    "/Library/Application Support/Blackmagic Design/Teranex/AdminUtility/PlugIns/TeranexMini8k/libTeranexMini8kSetup.dylib",
+  ]
   directives.fetch(:quit) == "com.blackmagic-design.teranex.utility" &&
-    directives.fetch(:script).fetch(:executable) ==
-      "Uninstall Teranex.app/Contents/Resources/uninstall_uid_root.sh" &&
-    directives.fetch(:script).fetch(:sudo) &&
+    delete_targets == [
+      "/Applications/Blackmagic Teranex",
+      "/Library/Application Support/Blackmagic Design/Teranex",
+    ] &&
+    mini_payload_paths.all? do |payload|
+      delete_targets.any? { |target| payload == target || payload.start_with?("#{target}/") }
+    end &&
     directives.fetch(:pkgutil) == [
       "^com\\.blackmagic-design\\.Teranex$",
       "^com\\.blackmagic-design\\.TeranexAssets$",
       "^com\\.blackmagic-design\\.TeranexMini$",
       "^com\\.blackmagic-design\\.TeranexUninstaller$",
     ]
+end
+
+check("Teranex requires the minimum macOS version stated in its release notes") do
+  requirement = teranex&.depends_on&.macos
+  requirement && requirement.minimum_version.to_s == "11"
 end
 
 report_failures!

@@ -39,7 +39,8 @@ Some casks install a full vendor bundle:
 - `blackmagic-davinci-resolve` and `blackmagic-davinci-resolve-studio` also install control panel
   support, the Fairlight Audio Accelerator driver and the Blackmagic RAW Player.
 - `blackmagic-teranex` also installs the Teranex Mini component. It removes the bundled Teranex
-  receipts by exact ID rather than deleting receipts by a shared prefix.
+  receipts by exact ID rather than deleting receipts by a shared prefix. It requires macOS 11 Big Sur
+  or later; the installer supports both Apple silicon and Intel Macs.
 
 These casks remove the same items as the vendor uninstaller. The vendor uninstaller can remove
 shared components that other Blackmagic products use. If this occurs, install the affected products

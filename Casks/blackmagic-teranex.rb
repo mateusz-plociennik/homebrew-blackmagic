@@ -18,21 +18,22 @@ cask "blackmagic-teranex" do
     strategy :json, &BmdCatalog::MAC_RELEASES
   end
 
+  # Release notes require macOS 11 Big Sur, Homebrew's macOS floor. Distribution supports arm64 and x86_64.
   depends_on :macos
 
   pkg "Install Teranex #{version}.pkg"
 
-  # This installer also bundles TeranexMini. Use the root helper that removes only the Teranex app
-  # and support directories; the standard uninstall.sh removes receipts with a broad Teranex* wildcard.
+  # All four package payloads are under these paths. TeranexMini installs its setup plugins inside
+  # the shared Teranex support directory; target both roots rather than forgetting Mini's receipt alone.
   uninstall quit:    "com.blackmagic-design.teranex.utility",
-            script:  {
-              executable: "Uninstall Teranex.app/Contents/Resources/uninstall_uid_root.sh",
-              sudo:       true,
-            },
             pkgutil: [
               "^com\\.blackmagic-design\\.Teranex$",
               "^com\\.blackmagic-design\\.TeranexAssets$",
               "^com\\.blackmagic-design\\.TeranexMini$",
               "^com\\.blackmagic-design\\.TeranexUninstaller$",
+            ],
+            delete:  [
+              "/Applications/Blackmagic Teranex",
+              "/Library/Application Support/Blackmagic Design/Teranex",
             ]
 end
