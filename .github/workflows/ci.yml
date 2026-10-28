@@ -85,9 +85,10 @@ jobs:
 
   install:
     # What the offline checks cannot prove about a new release: that its `pkg` name still matches, and
-    # that `uninstall pkgutil:` removes every receipt it writes. Downloads the artifact, so PRs only.
+    # that `uninstall pkgutil:` removes every receipt it writes. DeckLink is Intel-only, so use an
+    # Intel runner. Downloads the artifact, so PRs only.
     if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
-    runs-on: macos-latest
+    runs-on: macos-15-intel
     env:
       # Resolve: same reason as `audit-online.yml`, registration-path casks need a real identity.
       # Cintel: its uninstall script deactivates a driver extension, which waits for user approval.
