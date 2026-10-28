@@ -93,7 +93,8 @@ jobs:
       # Cintel: its uninstall script deactivates a driver extension, which waits for user approval.
       # Resolve Studio: uninstall deliberately keeps the Fairlight driver and RAW Player receipts, as
       # Blackmagic's uninstaller does, so receipt equality cannot hold.
-      SKIP_CASKS: blackmagic-davinci-resolve blackmagic-davinci-resolve-studio blackmagic-cintel
+      # Web Presenter: its package and receipts are shared with Streaming, so uninstall leaves them.
+      SKIP_CASKS: blackmagic-davinci-resolve blackmagic-davinci-resolve-studio blackmagic-cintel blackmagic-web-presenter
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
@@ -134,7 +135,15 @@ jobs:
           failed=""
           for cask in $CASKS; do
             case " $SKIP_CASKS " in
-              *" $cask "*) echo "::notice::Skipping $cask: cannot install unattended, install it locally"; continue ;;
+              *" $cask "*)
+                if [ "$cask" = blackmagic-web-presenter ]; then
+                  echo "::notice::Skipping $cask: uninstall preserves shared receipts, so receipt equality cannot pass"
+                  echo "::notice::On a disposable Mac, install both products, uninstall Web Presenter, then verify Streaming's app and receipts still work"
+                else
+                  echo "::notice::Skipping $cask: cannot install unattended, install it locally"
+                fi
+                continue
+                ;;
             esac
             echo "::group::$cask"
             # Outside any `if`, so a failing pkgutil stops the step instead of reading as no receipts.

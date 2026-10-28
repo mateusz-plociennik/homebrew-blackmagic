@@ -45,12 +45,16 @@ while read -r pr branch sha <&3; do
     echo "### Next steps"
     echo
     echo "[CI]($runs_url) runs on this branch."
-    echo "It runs style, audit, the tests, and a real install + uninstall of \`$cask\` on a fresh runner."
+    echo "It runs style, audit, and the tests."
     echo
-    if [[ " $skip " == *" $cask "* ]]; then
-      echo "- [ ] \`$cask\` cannot be installed unattended, so CI skips it. Before merging, run locally:"
+    if [[ "$cask" == "blackmagic-web-presenter" ]]; then
+      echo "The install job skips \`$cask\` because its uninstall must preserve package receipts shared with Streaming."
+      echo "      Before merging, install both on a disposable Mac, uninstall Web Presenter, and verify Streaming's app and receipts still work."
+    elif [[ " $skip " == *" $cask " ]]; then
+      echo "The install job skips \`$cask\` because it cannot be installed unattended. Before merging, run locally:"
       echo "      \`brew install --cask $TAP/$cask && brew uninstall --cask $TAP/$cask\`"
     else
+      echo "The install job also runs a real install and uninstall of \`$cask\` on a fresh runner."
       echo "- [ ] CI green → merge. The install proves the \`pkg\` name, the uninstall proves the receipts."
       echo "- [ ] CI red on **install** → this release renamed its pkg or receipts. Fix the cask on this branch;"
       echo "      To see what the artifact contains now, scaffold a throwaway copy into a temp dir (downloads the full artifact):"

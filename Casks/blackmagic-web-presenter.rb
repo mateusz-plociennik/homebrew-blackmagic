@@ -22,12 +22,6 @@ cask "blackmagic-web-presenter" do
 
   pkg "Install Web Presenter #{version}.pkg"
 
-  # The vendor script uses a broad receipt prefix. Keep cleanup to this installer's exact receipts;
-  # this app bundle is also used by Streaming, so uninstalling Web Presenter removes that shared app.
-  uninstall pkgutil: [
-              "^com\\.blackmagic-design\\.WebPresenter$",
-              "^com\\.blackmagic-design\\.WebPresenterAssets$",
-              "^com\\.blackmagic-design\\.WebPresenterUninstaller$",
-            ],
-            delete:  "/Applications/Blackmagic Web Presenter"
+  # The vendor uninstaller removes the shared app and forgets the receipts Streaming uses too.
+  # Leave the package payload and receipts in place so uninstalling this cask cannot break Streaming.
 end

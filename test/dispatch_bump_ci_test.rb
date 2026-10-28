@@ -20,15 +20,20 @@ STUB_GH = <<~'SH'
   case "$1 $2" in
     "pr list") [[ -e "$FIXTURES/pr-list-fails" ]] && exit 1; cat "$FIXTURES/prs" ;;
     "run list") sha=${args##*--commit }; sha=${sha%% *}; [[ -e "$FIXTURES/run-$sha" ]] && echo 1 || echo 0 ;;
-    "pr diff") printf '+++ b/Casks/blackmagic-x.rb\n-  version "1.1"\n+  version "1.2"\n' ;;
+    "pr diff") printf "+++ b/Casks/%s.rb\n-  version \"1.1\"\n+  version \"1.2\"\n" "$CASK" ;;
     "workflow run") [[ -e "$FIXTURES/dispatch-fails-${args##*pr=}" ]] && exit 1; true ;;
-    "pr comment") [[ -e "$FIXTURES/comment-fails-$3" ]] && exit 1; true ;;
+    "pr comment")
+      [[ -e "$FIXTURES/comment-fails-$3" ]] && exit 1
+      cat "${args##*--body-file }" >> "$FIXTURES/comment"
+      true
+      ;;
     "pr view") [[ -e "$FIXTURES/commented-$3" ]] && echo 1 || echo 0 ;;
   esac
 SH
 
 # Runs the script against `prs` (lines of "number branch sha"); returns [success?, calls made].
-def dispatch(prs, runs: [], failing: [], failing_comments: [], commented: [], pr_list_fails: false)
+def dispatch(prs, cask: "blackmagic-x", runs: [], failing: [], failing_comments: [],
+             commented: [], pr_list_fails: false)
   Dir.mktmpdir do |dir|
     File.write("#{dir}/gh", STUB_GH)
     File.chmod(0755, "#{dir}/gh")
@@ -38,10 +43,12 @@ def dispatch(prs, runs: [], failing: [], failing_comments: [], commented: [], pr
     failing_comments.each { |pr| File.write("#{dir}/comment-fails-#{pr}", "") }
     commented.each { |pr| File.write("#{dir}/commented-#{pr}", "") }
     File.write("#{dir}/pr-list-fails", "") if pr_list_fails
-    env = { "PATH" => "#{dir}:#{ENV.fetch("PATH")}", "FIXTURES" => dir, "REPO" => "o/r", "TAP" => "o/t" }
+    env = { "PATH" => "#{dir}:#{ENV.fetch("PATH")}", "FIXTURES" => dir, "REPO" => "o/r", "TAP" => "o/t",
+            "CASK" => cask }
     _, status = Open3.capture2e(env, DISPATCH_SCRIPT)
     calls = File.exist?("#{dir}/log") ? File.readlines("#{dir}/log", chomp: true) : []
-    [status.success?, calls]
+    comment = File.exist?("#{dir}/comment") ? File.read("#{dir}/comment") : ""
+    [status.success?, calls, comment]
   end
 end
 
@@ -93,6 +100,13 @@ end
 check("no open PRs is a successful no-op") do
   ok, calls = dispatch([])
   ok && dispatched(calls).empty?
+end
+
+check("Web Presenter bump instructions explain the shared-payload coexistence check") do
+  ok, calls, comment = dispatch(["7 bump-blackmagic-web-presenter-3.6 aaa"], cask: "blackmagic-web-presenter")
+  ok && commented(calls) == ["7"] &&
+    comment.include?("uninstall must preserve package receipts shared with Streaming") &&
+    comment.include?("install both on a disposable Mac, uninstall Web Presenter")
 end
 
 report_failures!
