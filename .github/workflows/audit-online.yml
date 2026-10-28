@@ -32,6 +32,7 @@ concurrency:
 
 permissions:
   contents: read
+  issues: write
 
 env:
   # Registration-path casks cannot be audited here: resolving their download means POSTing a real
@@ -99,3 +100,14 @@ jobs:
             echo "Failed:$failed"
             exit 1
           fi
+
+      - name: Report to the failure issue
+        # Scheduled runs only: a manual run of a few casks says nothing about the weekly result.
+        if: ${{ !cancelled() && github.event_name == 'schedule' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          WORKFLOW: ${{ github.workflow }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TAP: ${{ steps.set-up-homebrew.outputs.tap-name }}
+        run: '"$(brew --repo "$TAP")/bin/report-run" "${{ job.status }}"'
