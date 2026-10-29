@@ -25,25 +25,17 @@ cask "blackmagic-decklink" do
   # The package includes an unrelated Apple QuickTime component; do not install its system receipt.
   container nested: "DeckLink #{version}.dmg"
 
-  pkg "DeckLink Installer #{version}.mpkg",
-      choices: (0..5).map { |choice|
-        {
-          "choiceIdentifier" => "choice#{choice}",
-          "choiceAttribute"  => "selected",
-          "attributeSetting" => 1,
-        }
-      } + [
-        {
-          "choiceIdentifier" => "choice19",
-          "choiceAttribute"  => "selected",
-          "attributeSetting" => 1,
-        },
-        {
-          "choiceIdentifier" => "choice21",
-          "choiceAttribute"  => "selected",
-          "attributeSetting" => 0,
-        },
-      ]
+  %w[
+    blackmagicdecklinkapplications
+    blackmagicdecklinkcodec
+    blackmagicdecklinkdriver
+    blackmagicdecklinkpreferencepanes
+    blackmagicdecklinklaunchdaemons
+    blackmagicdecklinksupport
+    blackmagicdecklinkfinalcutprosupport
+  ].each do |package|
+    pkg "DeckLink Installer #{version}.mpkg/Contents/Packages/#{package}.pkg"
+  end
 
   uninstall launchctl: "com.blackmagic-design.DeckLinkStartup",
             script:    {

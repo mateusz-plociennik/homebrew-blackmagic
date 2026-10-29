@@ -46,32 +46,27 @@ end
 
 decklink = Cask::CaskLoader.load(File.read(File.expand_path("../Casks/blackmagic-decklink.rb", __dir__)))
 decklink_uninstall = decklink.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
-decklink_pkg = decklink.artifacts.grep(Cask::Artifact::Pkg).fetch(0)
+decklink_pkgs = decklink.artifacts.grep(Cask::Artifact::Pkg)
 
-check("DeckLink points to the package at the root of the installer image") do
-  decklink_pkg.path.relative_path_from(decklink.staged_path).to_s == "DeckLink Installer #{decklink.version}.mpkg"
+check("DeckLink installs each Blackmagic component package directly") do
+  packages = %w[
+    blackmagicdecklinkapplications
+    blackmagicdecklinkcodec
+    blackmagicdecklinkdriver
+    blackmagicdecklinkpreferencepanes
+    blackmagicdecklinklaunchdaemons
+    blackmagicdecklinksupport
+    blackmagicdecklinkfinalcutprosupport
+  ]
+  expected_paths = packages.map do |package|
+    "DeckLink Installer #{decklink.version}.mpkg/Contents/Packages/#{package}.pkg"
+  end
+
+  decklink_pkgs.map { |pkg| pkg.path.relative_path_from(decklink.staged_path).to_s } == expected_paths
 end
 
 check("DeckLink excludes the Apple codec and targets its exact package receipts") do
-  decklink_pkg.stanza_options.fetch(:choices) == [
-    *(0..5).map do |choice|
-      {
-        "choiceIdentifier" => "choice#{choice}",
-        "choiceAttribute"  => "selected",
-        "attributeSetting" => 1,
-      }
-    end,
-    {
-      "choiceIdentifier" => "choice19",
-      "choiceAttribute"  => "selected",
-      "attributeSetting" => 1,
-    },
-    {
-      "choiceIdentifier" => "choice21",
-      "choiceAttribute"  => "selected",
-      "attributeSetting" => 0,
-    },
-  ] && decklink_uninstall.fetch(:pkgutil) == [
+  decklink_pkgs.length == 7 && decklink_uninstall.fetch(:pkgutil) == [
     "^com\\.blackmagic-design\\.BlackmagicDeckLinkApplications$",
     "^com\\.blackmagic-design\\.BlackmagicDeckLinkCodec$",
     "^com\\.blackmagic-design\\.BlackmagicDeckLinkDriver$",
