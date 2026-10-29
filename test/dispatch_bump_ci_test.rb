@@ -19,7 +19,10 @@ STUB_GH = <<~'SH'
   echo "$args" >> "$FIXTURES/log"
   case "$1 $2" in
     "pr list") [[ -e "$FIXTURES/pr-list-fails" ]] && exit 1; cat "$FIXTURES/prs" ;;
-    "run list") sha=${args##*--commit }; sha=${sha%% *}; [[ -e "$FIXTURES/run-$sha" ]] && echo 1 || echo 0 ;;
+    "run list")
+      sha=${args##*--commit }; sha=${sha%% *}
+      while [[ $# -gt 0 && "$1" != --jq ]]; do shift; done
+      jq -r "$2" <<<"$(cat "$FIXTURES/run-$sha" 2>/dev/null || echo '[]')" ;;
     "pr diff") printf '+++ b/Casks/blackmagic-x.rb\n-  version "1.1"\n+  version "1.2"\n' ;;
     "workflow run") [[ -e "$FIXTURES/dispatch-fails-${args##*pr=}" ]] && exit 1; true ;;
     "pr comment") [[ -e "$FIXTURES/comment-fails-$3" ]] && exit 1; true ;;
@@ -28,12 +31,13 @@ STUB_GH = <<~'SH'
 SH
 
 # Runs the script against `prs` (lines of "number branch sha"); returns [success?, calls made].
-def dispatch(prs, runs: [], failing: [], failing_comments: [], commented: [], pr_list_fails: false)
+def dispatch(prs, runs: [], gated: [], failing: [], failing_comments: [], commented: [], pr_list_fails: false)
   Dir.mktmpdir do |dir|
     File.write("#{dir}/gh", STUB_GH)
     File.chmod(0755, "#{dir}/gh")
     File.write("#{dir}/prs", prs.join("\n"))
-    runs.each { |sha| File.write("#{dir}/run-#{sha}", "") }
+    runs.each { |sha| File.write("#{dir}/run-#{sha}", '[{"conclusion":"success"}]') }
+    gated.each { |sha| File.write("#{dir}/run-#{sha}", '[{"conclusion":"action_required"}]') }
     failing.each { |pr| File.write("#{dir}/dispatch-fails-#{pr}", "") }
     failing_comments.each { |pr| File.write("#{dir}/comment-fails-#{pr}", "") }
     commented.each { |pr| File.write("#{dir}/commented-#{pr}", "") }
@@ -58,6 +62,11 @@ end
 check("a run already on the PR head prevents a duplicate dispatch and comment") do
   ok, calls = dispatch(["7 bump-blackmagic-x-1.2 aaa"], runs: ["aaa"], commented: ["7"])
   ok && dispatched(calls).empty? && commented(calls).empty?
+end
+
+check("a pull_request run waiting for approval does not count: CI is dispatched") do
+  ok, calls = dispatch(["7 bump-blackmagic-x-1.2 aaa"], gated: ["aaa"])
+  ok && dispatched(calls) == ["7"] && commented(calls) == ["7"]
 end
 
 check("a missing comment is retried on the next run without redispatching CI") do
