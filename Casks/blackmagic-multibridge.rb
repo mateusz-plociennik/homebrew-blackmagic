@@ -22,49 +22,15 @@ cask "blackmagic-multibridge" do
   depends_on :macos, arch: :x86_64
   container nested: "Multibridge #{version}.dmg"
 
-  pkg "Multibridge Installer #{version}.mpkg",
-      choices: [
-        {
-          "choiceIdentifier" => "choice0",
-          "choiceAttribute"  => "selected",
-          "attributeSetting" => 1,
-        },
-        {
-          "choiceIdentifier" => "choice1",
-          "choiceAttribute"  => "selected",
-          "attributeSetting" => 1,
-        },
-        {
-          "choiceIdentifier" => "choice2",
-          "choiceAttribute"  => "selected",
-          "attributeSetting" => 1,
-        },
-        {
-          "choiceIdentifier" => "choice3",
-          "choiceAttribute"  => "selected",
-          "attributeSetting" => 1,
-        },
-        {
-          "choiceIdentifier" => "choice4",
-          "choiceAttribute"  => "selected",
-          "attributeSetting" => 1,
-        },
-        {
-          "choiceIdentifier" => "choice5",
-          "choiceAttribute"  => "selected",
-          "attributeSetting" => 1,
-        },
-        {
-          "choiceIdentifier" => "choice19",
-          "choiceAttribute"  => "selected",
-          "attributeSetting" => 1,
-        },
-        {
-          "choiceIdentifier" => "choice21",
-          "choiceAttribute"  => "selected",
-          "attributeSetting" => 0,
-        },
-      ]
+  # The enclosing MPKG sets customize="never", so installer choice changes leave no selected payload.
+  # Install its seven Blackmagic packages directly, leaving its unrelated Apple codec untouched.
+  pkg "Multibridge Installer #{version}.mpkg/Contents/Packages/blackmagicdecklinkapplications.pkg"
+  pkg "Multibridge Installer #{version}.mpkg/Contents/Packages/blackmagicdecklinkcodec.pkg"
+  pkg "Multibridge Installer #{version}.mpkg/Contents/Packages/blackmagicdecklinkdriver.pkg"
+  pkg "Multibridge Installer #{version}.mpkg/Contents/Packages/blackmagicdecklinkpreferencepanes.pkg"
+  pkg "Multibridge Installer #{version}.mpkg/Contents/Packages/blackmagicdecklinklaunchdaemons.pkg"
+  pkg "Multibridge Installer #{version}.mpkg/Contents/Packages/blackmagicdecklinksupport.pkg"
+  pkg "Multibridge Installer #{version}.mpkg/Contents/Packages/blackmagicdecklinkfinalcutprosupport.pkg"
 
   # The vendor uninstaller removes shared DeckLink drivers and tools, including Cintel's Disk Speed
   # Test app. Keep the receipts exact and block coexistence with products that use those components.

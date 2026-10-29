@@ -46,52 +46,19 @@ end
 
 multibridge = Cask::CaskLoader.load(File.read(File.expand_path("../Casks/blackmagic-multibridge.rb", __dir__)))
 multibridge_uninstall = multibridge.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
-multibridge_pkg = multibridge.artifacts.grep(Cask::Artifact::Pkg).fetch(0)
+multibridge_pkgs = multibridge.artifacts.grep(Cask::Artifact::Pkg)
 
 check("Multibridge excludes Apple's codec and targets its seven exact package receipts") do
-  multibridge_pkg.path.relative_path_from(multibridge.staged_path).to_s == "Multibridge Installer 7.9.4.mpkg" &&
-    multibridge_pkg.stanza_options.fetch(:choices) == [
-      {
-        "choiceIdentifier" => "choice0",
-        "choiceAttribute"  => "selected",
-        "attributeSetting" => 1,
-      },
-      {
-        "choiceIdentifier" => "choice1",
-        "choiceAttribute"  => "selected",
-        "attributeSetting" => 1,
-      },
-      {
-        "choiceIdentifier" => "choice2",
-        "choiceAttribute"  => "selected",
-        "attributeSetting" => 1,
-      },
-      {
-        "choiceIdentifier" => "choice3",
-        "choiceAttribute"  => "selected",
-        "attributeSetting" => 1,
-      },
-      {
-        "choiceIdentifier" => "choice4",
-        "choiceAttribute"  => "selected",
-        "attributeSetting" => 1,
-      },
-      {
-        "choiceIdentifier" => "choice5",
-        "choiceAttribute"  => "selected",
-        "attributeSetting" => 1,
-      },
-      {
-        "choiceIdentifier" => "choice19",
-        "choiceAttribute"  => "selected",
-        "attributeSetting" => 1,
-      },
-      {
-        "choiceIdentifier" => "choice21",
-        "choiceAttribute"  => "selected",
-        "attributeSetting" => 0,
-      },
-    ] && multibridge_uninstall.fetch(:pkgutil) == [
+  multibridge_pkgs.map { |pkg| pkg.path.relative_path_from(multibridge.staged_path).to_s } == [
+    "Multibridge Installer 7.9.4.mpkg/Contents/Packages/blackmagicdecklinkapplications.pkg",
+    "Multibridge Installer 7.9.4.mpkg/Contents/Packages/blackmagicdecklinkcodec.pkg",
+    "Multibridge Installer 7.9.4.mpkg/Contents/Packages/blackmagicdecklinkdriver.pkg",
+    "Multibridge Installer 7.9.4.mpkg/Contents/Packages/blackmagicdecklinkpreferencepanes.pkg",
+    "Multibridge Installer 7.9.4.mpkg/Contents/Packages/blackmagicdecklinklaunchdaemons.pkg",
+    "Multibridge Installer 7.9.4.mpkg/Contents/Packages/blackmagicdecklinksupport.pkg",
+    "Multibridge Installer 7.9.4.mpkg/Contents/Packages/blackmagicdecklinkfinalcutprosupport.pkg",
+  ] && multibridge_pkgs.all? { |pkg| pkg.stanza_options.empty? } &&
+    multibridge_uninstall.fetch(:pkgutil) == [
       "^com\\.blackmagic-design\\.BlackmagicDeckLinkApplications$",
       "^com\\.blackmagic-design\\.BlackmagicDeckLinkCodec$",
       "^com\\.blackmagic-design\\.BlackmagicDeckLinkDriver$",
