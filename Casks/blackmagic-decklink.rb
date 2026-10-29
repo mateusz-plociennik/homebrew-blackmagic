@@ -25,7 +25,7 @@ cask "blackmagic-decklink" do
   # The package includes an unrelated Apple QuickTime component; do not install its system receipt.
   container nested: "DeckLink #{version}.dmg"
 
-  pkg "DeckLink Installer/DeckLink Installer #{version}.mpkg",
+  pkg "DeckLink Installer #{version}.mpkg",
       choices: [
         {
           "choiceIdentifier" => "choice21",

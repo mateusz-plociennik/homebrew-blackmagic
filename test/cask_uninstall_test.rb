@@ -48,6 +48,10 @@ decklink = Cask::CaskLoader.load(File.read(File.expand_path("../Casks/blackmagic
 decklink_uninstall = decklink.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
 decklink_pkg = decklink.artifacts.grep(Cask::Artifact::Pkg).fetch(0)
 
+check("DeckLink points to the package at the root of the installer image") do
+  decklink_pkg.path.relative_path_from(decklink.staged_path).to_s == "DeckLink Installer #{decklink.version}.mpkg"
+end
+
 check("DeckLink excludes the Apple codec and targets its exact package receipts") do
   decklink_pkg.stanza_options.fetch(:choices) == [
     {
