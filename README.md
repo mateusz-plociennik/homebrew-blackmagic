@@ -36,6 +36,9 @@ Some casks install a full vendor bundle:
 
 - `blackmagic-camera` also installs the Blackmagic RAW tools and plug-ins.
 - `blackmagic-cintel` also installs Desktop Video drivers, Media Express and Disk Speed Test.
+- `blackmagic-multibridge` installs legacy DeckLink drivers and utilities. It conflicts with
+  `blackmagic-cintel` and `blackmagic-decklink` because the vendor uninstaller removes shared
+  components.
 - `blackmagic-davinci-resolve` and `blackmagic-davinci-resolve-studio` also install control panel
   support, the Fairlight Audio Accelerator driver and the Blackmagic RAW Player.
 

@@ -18,6 +18,7 @@ cask "blackmagic-cintel" do
     strategy :json, &BmdCatalog::MAC_RELEASES
   end
 
+  conflicts_with cask: "blackmagic-multibridge"
   depends_on :macos
 
   pkg "Install Cintel #{version}.pkg"
