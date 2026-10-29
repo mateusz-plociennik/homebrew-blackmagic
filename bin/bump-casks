@@ -1,8 +1,9 @@
 #!/bin/bash
 # Run by bump.yml: `brew bump` one cask at a time. A cask whose new release needs Blackmagic
-# registration cannot be bumped here: the runner has no identity, by design (lib/bmd_config.rb, #101).
-# Instead of failing the whole run on every schedule, each such cask and version gets one
-# `ready-for-human` issue with the command to run locally. Any other failure still fails the run.
+# registration downloads with the owner's `HOMEBREW_BMD_TAP_*` secrets (#107). Without them (unset,
+# or a fork), it cannot be bumped here. Instead of failing the whole run on every schedule, each such
+# cask and version gets one `ready-for-human` issue with the command to run locally. Any other
+# failure still fails the run.
 #
 # Needs TAP, REPO, and a `gh` that can write issues. REPORT_ONLY=true reports without PRs or issues.
 set -euo pipefail
@@ -37,7 +38,7 @@ while read -r cask <&3; do
                jq --arg t "$title" '[.[] | select(.title == $t)] | length')
   [[ "$existing" == 0 ]] || continue
   gh issue create --repo "$REPO" --label ready-for-human --title "$title" --body-file - <<EOF || failed="$failed $cask"
-\`$cask\` $version is out, but downloading it needs Blackmagic registration, and the bump runner has no identity on purpose (see \`lib/bmd_config.rb\`).
+\`$cask\` $version is out, but downloading it needs Blackmagic registration, and the bump runner has no registration details: the \`bmd-registration\` environment secrets are not set (see CONTRIBUTING.md).
 
 Bump it on a Mac with your registration details configured:
 

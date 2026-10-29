@@ -21,16 +21,18 @@ require "json"
 # `XDG_CONFIG_HOME` is honoured where set, which is also how the tests point the loader at a
 # temporary directory.
 #
-# Every field is overridable by a `BMD_TAP_`-prefixed environment variable, so CI (and a one-off
-# install with different details) needs no file at all. The environment wins over the file: it is the
-# more specific, more deliberate of the two.
+# Every field is overridable by a `HOMEBREW_BMD_TAP_`-prefixed environment variable, so CI (and a
+# one-off install with different details) needs no file at all. The environment wins over the file:
+# it is the more specific, more deliberate of the two. The `HOMEBREW_` prefix is load-bearing: `brew`
+# starts Ruby with `env -i` and keeps only `HOMEBREW_*` and a few fixed names, so a bare `BMD_TAP_*`
+# variable never reaches this code (#107).
 module BmdConfig
   # Blackmagic's `country` is a URL path segment on their API, and releases are the same worldwide —
   # it selects which regional Blackmagic entity the registration goes to, not which artifact.
   DEFAULT_COUNTRY = "au"
 
   RELATIVE_PATH = "bmd-tap/config.json"
-  ENV_PREFIX = "BMD_TAP_"
+  ENV_PREFIX = "HOMEBREW_BMD_TAP_"
 
   COUNTRY_FIELD = "country"
   TERMS_FIELD = "agreeToTerms"
