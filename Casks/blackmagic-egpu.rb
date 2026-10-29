@@ -20,7 +20,7 @@ cask "blackmagic-egpu" do
 
   depends_on :macos
 
-  pkg "Blackmagic eGPU/Blackmagic eGPU Firmware Updater.pkg"
+  pkg "Blackmagic eGPU Firmware Updater.pkg"
 
   preflight_steps do
     unless_path_exists ".config/bmd-tap/agree-to-egpu-license", base: :home do

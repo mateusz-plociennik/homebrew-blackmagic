@@ -51,7 +51,7 @@ egpu_preflight = egpu.artifacts.grep(Cask::Artifact::PreflightSteps).fetch(0).st
 egpu_uninstall_steps = egpu.artifacts.grep(Cask::Artifact::UninstallPostflightSteps).fetch(0).steps
 
 check("eGPU installs the nested firmware updater package") do
-  egpu_pkg.summarize == "Blackmagic eGPU/Blackmagic eGPU Firmware Updater.pkg"
+  egpu_pkg.summarize == "Blackmagic eGPU Firmware Updater.pkg"
 end
 
 check("eGPU uninstall forgets its exact receipt without removing its files") do
