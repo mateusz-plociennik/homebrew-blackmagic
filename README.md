@@ -40,8 +40,8 @@ Some casks install a full vendor bundle:
   support, the Fairlight Audio Accelerator driver and the Blackmagic RAW Player.
 - `blackmagic-web-presenter` and `blackmagic-streaming` share the Web Presenter app bundle and package
   receipts. Uninstalling the Web Presenter cask deliberately leaves the shared files and receipts in
-  place so Streaming remains usable. Run the vendor uninstaller only after confirming neither product
-  is needed.
+  place so Streaming remains usable. Its vendor uninstaller deletes the whole shared bundle and
+  forgets those receipts; run it only after confirming neither product is needed.
 
 Where a cask runs the vendor uninstaller, it removes the same items. Vendor uninstallers can remove
 shared components that other Blackmagic products use. If this occurs, install the affected products

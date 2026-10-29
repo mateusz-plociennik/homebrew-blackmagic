@@ -114,8 +114,16 @@ end
 check("Web Presenter bump instructions explain the shared-payload coexistence check") do
   ok, calls, comment = dispatch(["7 bump-blackmagic-web-presenter-3.6 aaa"], cask: "blackmagic-web-presenter")
   ok && commented(calls) == ["7"] &&
-    comment.include?("uninstall must preserve package receipts shared with Streaming") &&
+    comment.include?("verifies the package and shared app/receipts") &&
     comment.include?("install both on a disposable Mac, uninstall Web Presenter")
+end
+
+check("a cask in the CI skip list gets local verification instructions") do
+  ok, calls, comment = dispatch(["8 bump-blackmagic-cintel-7.1 bbb"], cask: "blackmagic-cintel")
+  ok && commented(calls) == ["8"] &&
+    comment.include?("install job skips `blackmagic-cintel`") &&
+    comment.include?("brew install --cask o/t/blackmagic-cintel && brew uninstall --cask blackmagic-cintel") &&
+    comment.exclude?("CI green → merge")
 end
 
 report_failures!

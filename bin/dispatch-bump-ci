@@ -52,11 +52,11 @@ while read -r pr branch sha <&3; do
     echo "It runs style, audit, and the tests."
     echo
     if [[ "$cask" == "blackmagic-web-presenter" ]]; then
-      echo "The install job skips \`$cask\` because its uninstall must preserve package receipts shared with Streaming."
+      echo "- [ ] The install job verifies the package and shared app/receipts, then leaves them installed because Streaming uses the same payload."
       echo "      Before merging, install both on a disposable Mac, uninstall Web Presenter, and verify Streaming's app and receipts still work."
-    elif [[ " $skip " == *" $cask " ]]; then
-      echo "The install job skips \`$cask\` because it cannot be installed unattended. Before merging, run locally:"
-      echo "      \`brew install --cask $TAP/$cask && brew uninstall --cask $TAP/$cask\`"
+    elif [[ " $skip " == *" $cask "* ]]; then
+      echo "- [ ] The install job skips \`$cask\` because it cannot be installed unattended. Before merging, run locally:"
+      echo "      \`brew install --cask $TAP/$cask && brew uninstall --cask $cask\`"
     else
       echo "The install job also runs a real install and uninstall of \`$cask\` on a fresh runner."
       echo "- [ ] CI green → merge. The install proves the \`pkg\` name, the uninstall proves the receipts."

@@ -91,7 +91,7 @@ jobs:
 
   install:
     # What the offline checks cannot prove about a new release: that its `pkg` name still matches, and
-    # that `uninstall pkgutil:` removes every receipt it writes. Downloads the artifact, so PRs only.
+    # that uninstall removes its package receipts. Downloads the artifact, so PRs only.
     if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: macos-latest
     env:
@@ -99,8 +99,8 @@ jobs:
       # Cintel: its uninstall script deactivates a driver extension, which waits for user approval.
       # Resolve Studio: uninstall deliberately keeps the Fairlight driver and RAW Player receipts, as
       # Blackmagic's uninstaller does, so receipt equality cannot hold.
-      # Web Presenter: its package and receipts are shared with Streaming, so uninstall leaves them.
-      SKIP_CASKS: blackmagic-davinci-resolve blackmagic-davinci-resolve-studio blackmagic-cintel blackmagic-web-presenter
+      # Web Presenter is checked separately below because its files and receipts are shared with Streaming.
+      SKIP_CASKS: blackmagic-davinci-resolve blackmagic-davinci-resolve-studio blackmagic-cintel
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
@@ -140,14 +140,45 @@ jobs:
 
           failed=""
           for cask in $CASKS; do
+            if [ "$cask" = blackmagic-web-presenter ]; then
+              echo "::group::$cask"
+              if brew install --cask "$TAP/$cask"; then
+                receipts=$(pkgutil --pkgs)
+                for receipt in \
+                  com.blackmagic-design.WebPresenter \
+                  com.blackmagic-design.WebPresenterAssets \
+                  com.blackmagic-design.WebPresenterUninstaller; do
+                  if ! grep -Fxq "$receipt" <<<"$receipts"; then
+                    echo "::error::$cask did not install receipt $receipt"
+                    failed="$failed $cask"
+                  fi
+                done
+                app="/Applications/Blackmagic Web Presenter/Blackmagic Web Presenter Setup.app"
+                [ -d "$app" ] || { echo "::error::$cask did not install $app"; failed="$failed $cask"; }
+                if brew uninstall --cask "$TAP/$cask"; then
+                  receipts=$(pkgutil --pkgs)
+                  for receipt in \
+                    com.blackmagic-design.WebPresenter \
+                    com.blackmagic-design.WebPresenterAssets \
+                    com.blackmagic-design.WebPresenterUninstaller; do
+                    if ! grep -Fxq "$receipt" <<<"$receipts"; then
+                      echo "::error::$cask removed shared receipt $receipt"
+                      failed="$failed $cask"
+                    fi
+                  done
+                  [ -d "$app" ] || { echo "::error::$cask removed shared app $app"; failed="$failed $cask"; }
+                else
+                  failed="$failed $cask"
+                fi
+              else
+                failed="$failed $cask"
+              fi
+              echo "::endgroup::"
+              continue
+            fi
             case " $SKIP_CASKS " in
               *" $cask "*)
-                if [ "$cask" = blackmagic-web-presenter ]; then
-                  echo "::notice::Skipping $cask: uninstall preserves shared receipts, so receipt equality cannot pass"
-                  echo "::notice::On a disposable Mac, install both products, uninstall Web Presenter, then verify Streaming's app and receipts still work"
-                else
-                  echo "::notice::Skipping $cask: cannot install unattended, install it locally"
-                fi
+                echo "::notice::Skipping $cask: cannot install unattended, install it locally"
                 continue
                 ;;
             esac
