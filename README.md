@@ -70,8 +70,8 @@ registration. For these downloads, write your registration details in
 
 - Use your real details. The tap sends your registration to Blackmagic. The tap does not supply
   default values.
-- You can set each field with an environment variable, for example `BMD_TAP_EMAIL`. An environment
-  variable overrides the file. An empty variable has no effect.
+- You can set each field with an environment variable, for example `HOMEBREW_BMD_TAP_EMAIL`. An
+  environment variable overrides the file. An empty variable has no effect.
 - If you set `$XDG_CONFIG_HOME`, the tap reads the file from `$XDG_CONFIG_HOME/bmd-tap/`.
 - The default `country` is `au`. Anonymous downloads use only this field.
 
