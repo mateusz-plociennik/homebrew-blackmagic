@@ -45,6 +45,10 @@ again. Items that the vendor uninstaller keeps, for example the Blackmagic RAW P
 and keep their package receipts. The cask files contain notes that tell you how to change this
 policy.
 
+`blackmagic-egpu` installs firmware files for both Blackmagic eGPU models. On uninstall it removes
+those two firmware files and its exact package receipt, but keeps the shared
+`BlackmagicDesign.plist` that describes both models.
+
 ## Registration details
 
 Most Blackmagic downloads are anonymous. You can install them with no configuration. DaVinci Resolve
@@ -80,8 +84,21 @@ file path and the necessary JSON. The tap does not prompt you during the install
 
 ## Licence agreements
 
-Some releases are available only after you accept a licence agreement. For these releases, do
-these steps:
+The Blackmagic eGPU installer package has a separate licence agreement. Review the agreement in the
+package before installing. If you agree, explicitly create this marker before running `brew install`:
+
+```sh
+mkdir -p "$HOME/.config/bmd-tap"
+touch "$HOME/.config/bmd-tap/agree-to-egpu-license"
+```
+
+This marker is local and is not sent to Blackmagic. The eGPU download itself is anonymous and does
+not require catalog registration or catalog-term acceptance. The tap does not supply a software
+licence or handle any separate activation or hardware eligibility requirements.
+Unlike `config.json`, this marker remains under `~/.config` when `$XDG_CONFIG_HOME` is set.
+
+Some other releases are available only after you accept a licence agreement through Blackmagic's
+download service. For these releases, do these steps:
 
 1. Run `brew install`. The install stops before the download starts and shows the agreement.
 2. Read the agreement.
@@ -94,8 +111,8 @@ these steps:
 4. Run `brew install` again.
 
 The tap reads this key only from the config file. No environment variable sets it. The tap tells
-Blackmagic that you accept the licence, so you must accept it deliberately. At this time, no cask
-in this tap uses a licence agreement.
+Blackmagic that you accept the catalog agreement, so you must accept it deliberately. This is
+separate from the eGPU installer package's local licence opt-in described above.
 
 ## Updates
 

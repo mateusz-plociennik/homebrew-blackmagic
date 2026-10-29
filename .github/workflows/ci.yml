@@ -156,6 +156,11 @@ jobs:
               continue
             fi
             echo "::group::$cask"
+            if [ "$cask" = blackmagic-egpu ]; then
+              marker="$HOME/.config/bmd-tap/agree-to-egpu-license"
+              mkdir -p "$(dirname "$marker")"
+              touch "$marker"
+            fi
             # Outside any `if`, so a failing pkgutil stops the step instead of reading as no receipts.
             pkgutil --pkgs > "$snapshots/before"
             if brew install --cask "$TAP/$cask" && brew uninstall --cask "$TAP/$cask"; then
@@ -166,6 +171,9 @@ jobs:
               fi
             else
               failed="$failed $cask"
+            fi
+            if [ "$cask" = blackmagic-egpu ]; then
+              rm -f "$marker"
             fi
             echo "::endgroup::"
           done
