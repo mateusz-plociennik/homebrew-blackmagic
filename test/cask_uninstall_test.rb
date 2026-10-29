@@ -1,6 +1,7 @@
 # typed: strict
 # frozen_string_literal: true
 
+require "tmpdir"
 require "cask/cask_loader"
 require_relative "support"
 
@@ -91,11 +92,54 @@ end
 check("UltraScope removes only its own system login hook") do
   args = ultrascope_postflight.fetch(0).fetch("args")
   command = args.fetch(1)
-  command.include?(
-    "if [ \"$hook\" = '/Library/Application\\ Support/Blackmagic\\ Design/" \
-    "Blackmagic\\ UltraScope/UltraScopeLoginItem.sh' ]",
-  ) &&
-    command.include?("/usr/bin/defaults delete com.apple.loginwindow LoginHook")
+  command.include?("defaults read com.apple.loginwindow LoginHook") &&
+    command.include?("/usr/bin/sed") &&
+    command.include?(
+      "if [ \"$hook\" = '/Library/Application Support/Blackmagic Design/" \
+      "Blackmagic UltraScope/UltraScopeLoginItem.sh' ]",
+    )
+end
+
+check("UltraScope login-hook cleanup matches quoted, escaped defaults output only") do
+  args = ultrascope_postflight.fetch(0).fetch("args")
+  Dir.mktmpdir("ultrascope-hook-test") do |dir|
+    defaults = File.join(dir, "defaults")
+    log = File.join(dir, "calls")
+    File.write(defaults, <<~SH)
+      #!/bin/sh
+      if [ "$1" = read ]; then
+        printf '%s\\n' "$MOCK_LOGIN_HOOK"
+      else
+        printf '%s\\n' "$*" >> "$MOCK_DEFAULTS_LOG"
+      fi
+    SH
+    File.chmod(0755, defaults)
+    command = args.fetch(1).gsub("/usr/bin/defaults", defaults)
+    ultra_scope_hook =
+      "\"/Library/Application\\\\ Support/Blackmagic\\\\ Design/Blackmagic\\\\ UltraScope/UltraScopeLoginItem.sh\""
+    unrelated_hook = "\"/Library/Application\\\\ Support/Other/OtherLoginItem.sh\""
+
+    matches_ultrascope = system(
+      { "MOCK_LOGIN_HOOK" => ultra_scope_hook, "MOCK_DEFAULTS_LOG" => log },
+      "/bin/sh", "-c", command, out: File::NULL, err: File::NULL
+    )
+    deleted_ultrascope = File.read(log).include?("delete com.apple.loginwindow LoginHook")
+    File.delete(log)
+
+    matches_other = system(
+      { "MOCK_LOGIN_HOOK" => unrelated_hook, "MOCK_DEFAULTS_LOG" => log },
+      "/bin/sh", "-c", command, out: File::NULL, err: File::NULL
+    )
+    left_other_hook = !File.exist?(log)
+    matches_ultrascope && deleted_ultrascope && matches_other && left_other_hook
+  end
+end
+
+check("UltraScope documents vendor cleanup and the receipt-only alternative") do
+  source = File.read(File.expand_path("../Casks/blackmagic-ultrascope.rb", __dir__))
+  source.include?("removes UltraScope's app, drivers, support files and startup item") &&
+    source.include?("no shared app or receipt paths") &&
+    source.include?("For receipt-only cleanup, remove this script directive")
 end
 
 report_failures!

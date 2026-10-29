@@ -30,13 +30,17 @@ cask "blackmagic-ultrascope" do
     run "/bin/sh",
         args: ["-c", <<~'SH'],
           hook=$(/usr/bin/defaults read com.apple.loginwindow LoginHook 2>/dev/null || true)
-          if [ "$hook" = '/Library/Application\ Support/Blackmagic\ Design/Blackmagic\ UltraScope/UltraScopeLoginItem.sh' ]; then
+          hook=$(printf '%s\n' "$hook" | /usr/bin/sed -e 's/^"//' -e 's/"$//' -e 's/\\\\/\\/g' -e 's/\\ / /g')
+          if [ "$hook" = '/Library/Application Support/Blackmagic Design/Blackmagic UltraScope/UltraScopeLoginItem.sh' ]; then
             /usr/bin/defaults delete com.apple.loginwindow LoginHook
           fi
         SH
         sudo: true
   end
 
+  # The vendor script removes UltraScope's app, drivers, support files and startup item. Its 1.8.4
+  # payload has no shared app or receipt paths with the other tap casks.
+  # For receipt-only cleanup, remove this script directive and the postflight block above.
   uninstall script:  {
               executable: "/Applications/Blackmagic UltraScope/Uninstall UltraScope.app/Contents/Resources/uninstall.sh",
               sudo:       true,
