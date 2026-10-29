@@ -49,21 +49,24 @@ multibridge_uninstall = multibridge.artifacts.grep(Cask::Artifact::Uninstall).fe
 multibridge_pkg = multibridge.artifacts.grep(Cask::Artifact::Pkg).fetch(0)
 
 check("Multibridge excludes Apple's codec and targets its seven exact package receipts") do
-  multibridge_pkg.stanza_options.fetch(:choices) == [
-    {
-      "choiceIdentifier" => "choice21",
-      "choiceAttribute"  => "selected",
-      "attributeSetting" => 0,
-    },
-  ] && multibridge_uninstall.fetch(:pkgutil) == [
-    "^com\\.blackmagic-design\\.BlackmagicDeckLinkApplications$",
-    "^com\\.blackmagic-design\\.BlackmagicDeckLinkCodec$",
-    "^com\\.blackmagic-design\\.BlackmagicDeckLinkDriver$",
-    "^com\\.blackmagic-design\\.BlackmagicDeckLinkFinalCutProSupport$",
-    "^com\\.blackmagic-design\\.BlackmagicDecklinkLaunchDaemons$",
-    "^com\\.blackmagic-design\\.BlackmagicDeckLinkPreferencePanes$",
-    "^com\\.blackmagic-design\\.BlackmagicDeckLinkSupport$",
-  ] && multibridge_uninstall.fetch(:script).fetch(:args) == ["Multibridge"] &&
+  multibridge_pkg.path.relative_path_from(multibridge.staged_path).to_s == "Multibridge Installer 7.9.4.mpkg" &&
+    multibridge_pkg.stanza_options.fetch(:choices) == [
+      {
+        "choiceIdentifier" => "choice21",
+        "choiceAttribute"  => "selected",
+        "attributeSetting" => 0,
+      },
+    ] && multibridge_uninstall.fetch(:pkgutil) == [
+      "^com\\.blackmagic-design\\.BlackmagicDeckLinkApplications$",
+      "^com\\.blackmagic-design\\.BlackmagicDeckLinkCodec$",
+      "^com\\.blackmagic-design\\.BlackmagicDeckLinkDriver$",
+      "^com\\.blackmagic-design\\.BlackmagicDeckLinkFinalCutProSupport$",
+      "^com\\.blackmagic-design\\.BlackmagicDecklinkLaunchDaemons$",
+      "^com\\.blackmagic-design\\.BlackmagicDeckLinkPreferencePanes$",
+      "^com\\.blackmagic-design\\.BlackmagicDeckLinkSupport$",
+    ] && multibridge_uninstall.fetch(:script).fetch(:executable) ==
+      "Uninstall Multibridge.app/Contents/Resources/uninstall.sh" &&
+    multibridge_uninstall.fetch(:script).fetch(:args) == ["Multibridge"] &&
     multibridge_uninstall.fetch(:launchctl) == "com.blackmagic-design.DeckLinkStartup"
 end
 

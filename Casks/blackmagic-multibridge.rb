@@ -22,7 +22,7 @@ cask "blackmagic-multibridge" do
   depends_on :macos, arch: :x86_64
   container nested: "Multibridge #{version}.dmg"
 
-  pkg "Multibridge Installer/Multibridge Installer #{version}.mpkg",
+  pkg "Multibridge Installer #{version}.mpkg",
       choices: [
         {
           "choiceIdentifier" => "choice21",
@@ -35,7 +35,7 @@ cask "blackmagic-multibridge" do
   # Test app. Keep the receipts exact and block coexistence with products that use those components.
   uninstall launchctl: "com.blackmagic-design.DeckLinkStartup",
             script:    {
-              executable: "Multibridge Installer/Uninstall Multibridge.app/Contents/Resources/uninstall.sh",
+              executable: "Uninstall Multibridge.app/Contents/Resources/uninstall.sh",
               args:       ["Multibridge"],
               sudo:       true,
             },
