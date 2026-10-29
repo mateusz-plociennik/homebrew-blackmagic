@@ -18,7 +18,11 @@ description: "Implement a ready-for-agent issue or approved spec through tests, 
    acceptance-criteria coverage; fix findings and rerun affected checks.
 5. Commit to the assigned working branch and update the implementation PR with
    evidence and remaining gates. Keep the issue open until its completion
-   policy is satisfied, including any required parent evidence handoff.
+   policy is satisfied, including any required parent evidence handoff. Leave
+   the PR in draft: the factory loop runs CI and a cold review, sends findings
+   back as `@copilot` comments, and marks the PR ready for a human.
+6. On a rework comment, fix only what it names (or reply why a finding is
+   wrong), rerun `bin/verify`, and push.
 
 This repository-local workflow adapts the implement approach from
 [mattpocock/skills](https://github.com/mattpocock/skills). TDD and review steps

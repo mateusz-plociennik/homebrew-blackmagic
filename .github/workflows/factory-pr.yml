@@ -1,0 +1,50 @@
+name: Factory loop
+
+# Moves factory PRs between the Copilot implementer and the factory reviewer until they are ready for
+# a human; see `bin/factory-pr`. Every trigger rescans every open factory PR, so events are only
+# wake-ups. The schedule catches what no event reports: Copilot finishing a session, and runs
+# started with `GITHUB_TOKEN`, whose completion does not trigger `workflow_run`.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_run:
+    workflows: [CI, Factory review]
+    types: [completed]
+  # Base-branch workflow and script, so a PR cannot change what moves it.
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+  workflow_dispatch:
+
+concurrency:
+  # Coalesce: one scan at a time, at most one queued behind it.
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      # Only for `gh pr ready`: markPullRequestReadyForReview needs Contents write (cli/cli#8910).
+      # The script never pushes.
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Checkout the loop script
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Move each factory PR one step
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          # Copilot only acts on `@copilot` comments from a Copilot-licensed user with write access;
+          # the same PAT `copilot-issue.yml` assigns with. Used for those comments and nothing else.
+          COPILOT_TOKEN: ${{ secrets.COPILOT_ASSIGN_TOKEN }}
+        run: bash bin/factory-pr

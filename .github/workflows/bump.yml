@@ -30,6 +30,7 @@ concurrency:
 permissions:
   actions: write
   contents: write
+  issues: write
   pull-requests: write
 
 jobs:
@@ -41,9 +42,9 @@ jobs:
         id: set-up-homebrew
         uses: Homebrew/actions/setup-homebrew@main
         with:
-          # The token pushes bump branches and opens PRs. `BUMP_TOKEN` is optional: set it to a PAT if
-          # you want the bump PRs to trigger the CI workflow, which `GITHUB_TOKEN`-authored PRs
-          # deliberately do not.
+          # The token pushes bump branches and opens PRs. `BUMP_TOKEN` is optional: without it, the
+          # `pull_request` run of a `GITHUB_TOKEN`-authored PR waits for manual approval, so the last
+          # step dispatches CI instead. A PAT here makes the `pull_request` run start by itself.
           token: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
           brew-gh-api-token: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
           cask: true
@@ -92,17 +93,14 @@ jobs:
           HOMEBREW_GIT_NAME: github-actions[bot]
           HOMEBREW_GIT_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
           HOMEBREW_NO_INSTALL_FROM_API: 1
+          # Files the manual-bump issues for casks that need registration; see the script.
+          GH_TOKEN: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
           TAP: ${{ steps.set-up-homebrew.outputs.tap-name }}
           REPORT_ONLY: ${{ inputs.report-only }}
-        run: |
-          # `--no-fork` pushes the bump branch to this repository rather than a fork; the token above
-          # is what authorises that push. Built as a bash array rather than a workflow expression of
-          # the form "cond && A || B", where an empty A is falsy and silently selects B. Note that
-          # GitHub parses expression delimiters even inside a shell comment, so one cannot be written
-          # out here as an example.
-          args=(--cask --tap "$TAP")
-          [[ "$REPORT_ONLY" == "true" ]] || args+=(--open-pr --no-fork)
-          brew bump "${args[@]}"
+        # `--no-fork` (in the script) pushes the bump branch to this repository rather than a fork;
+        # the token above is what authorises that push.
+        run: '"$(brew --repo "$TAP")/bin/bump-casks"'
 
       - name: Verify and annotate bump PRs
         # `!cancelled()` so a PR opened before another cask's bump failed still gets verified. PRs a
@@ -113,3 +111,13 @@ jobs:
           REPO: ${{ github.repository }}
           TAP: ${{ steps.set-up-homebrew.outputs.tap-name }}
         run: '"$(brew --repo "$TAP")/bin/dispatch-bump-ci"'
+
+      - name: Report to the failure issue
+        if: ${{ !cancelled() && github.event_name == 'schedule' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          WORKFLOW: ${{ github.workflow }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TAP: ${{ steps.set-up-homebrew.outputs.tap-name }}
+        run: '"$(brew --repo "$TAP")/bin/report-run" "${{ job.status }}"'
