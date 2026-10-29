@@ -44,6 +44,44 @@ check("Cintel removes both orphaned helper jobs, plists and the privileged helpe
   ]
 end
 
+decklink = Cask::CaskLoader.load(File.read(File.expand_path("../Casks/blackmagic-decklink.rb", __dir__)))
+decklink_uninstall = decklink.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
+decklink_pkgs = decklink.artifacts.grep(Cask::Artifact::Pkg)
+
+check("DeckLink installs each Blackmagic component package directly") do
+  packages = %w[
+    blackmagicdecklinkapplications
+    blackmagicdecklinkcodec
+    blackmagicdecklinkdriver
+    blackmagicdecklinkpreferencepanes
+    blackmagicdecklinklaunchdaemons
+    blackmagicdecklinksupport
+    blackmagicdecklinkfinalcutprosupport
+  ]
+  expected_paths = packages.map do |package|
+    "DeckLink Installer #{decklink.version}.mpkg/Contents/Packages/#{package}.pkg"
+  end
+
+  decklink_pkgs.map { |pkg| pkg.path.relative_path_from(decklink.staged_path).to_s } == expected_paths
+end
+
+check("DeckLink excludes the Apple codec and targets its exact package receipts") do
+  decklink_pkgs.length == 7 && decklink_uninstall.fetch(:pkgutil) == [
+    "^com\\.blackmagic-design\\.BlackmagicDeckLinkApplications$",
+    "^com\\.blackmagic-design\\.BlackmagicDeckLinkCodec$",
+    "^com\\.blackmagic-design\\.BlackmagicDeckLinkDriver$",
+    "^com\\.blackmagic-design\\.BlackmagicDeckLinkFinalCutProSupport$",
+    "^com\\.blackmagic-design\\.BlackmagicDecklinkLaunchDaemons$",
+    "^com\\.blackmagic-design\\.BlackmagicDeckLinkPreferencePanes$",
+    "^com\\.blackmagic-design\\.BlackmagicDeckLinkSupport$",
+  ]
+end
+
+check("DeckLink and Cintel conflicts are reciprocal") do
+  decklink.conflicts_with.to_h.fetch(:cask).include?("blackmagic-cintel") &&
+    cintel.conflicts_with.to_h.fetch(:cask).include?("blackmagic-decklink")
+end
+
 casks = Dir[File.expand_path("../Casks/*.rb", __dir__)].map do |path|
   [File.basename(path), Cask::CaskLoader.load(File.read(path))]
 end

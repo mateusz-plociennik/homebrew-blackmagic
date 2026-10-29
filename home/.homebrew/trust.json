@@ -1,0 +1,6 @@
+{
+  "trustedtaps": [
+    "http://localhost:26831/mateusz-plociennik/homebrew-blackmagic",
+    "mateusz-plociennik/blackmagic"
+  ]
+}
