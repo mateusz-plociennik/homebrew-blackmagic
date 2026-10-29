@@ -52,6 +52,41 @@ check("Multibridge excludes Apple's codec and targets its seven exact package re
   multibridge_pkg.path.relative_path_from(multibridge.staged_path).to_s == "Multibridge Installer 7.9.4.mpkg" &&
     multibridge_pkg.stanza_options.fetch(:choices) == [
       {
+        "choiceIdentifier" => "choice0",
+        "choiceAttribute"  => "selected",
+        "attributeSetting" => 1,
+      },
+      {
+        "choiceIdentifier" => "choice1",
+        "choiceAttribute"  => "selected",
+        "attributeSetting" => 1,
+      },
+      {
+        "choiceIdentifier" => "choice2",
+        "choiceAttribute"  => "selected",
+        "attributeSetting" => 1,
+      },
+      {
+        "choiceIdentifier" => "choice3",
+        "choiceAttribute"  => "selected",
+        "attributeSetting" => 1,
+      },
+      {
+        "choiceIdentifier" => "choice4",
+        "choiceAttribute"  => "selected",
+        "attributeSetting" => 1,
+      },
+      {
+        "choiceIdentifier" => "choice5",
+        "choiceAttribute"  => "selected",
+        "attributeSetting" => 1,
+      },
+      {
+        "choiceIdentifier" => "choice19",
+        "choiceAttribute"  => "selected",
+        "attributeSetting" => 1,
+      },
+      {
         "choiceIdentifier" => "choice21",
         "choiceAttribute"  => "selected",
         "attributeSetting" => 0,

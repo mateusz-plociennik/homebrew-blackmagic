@@ -25,6 +25,41 @@ cask "blackmagic-multibridge" do
   pkg "Multibridge Installer #{version}.mpkg",
       choices: [
         {
+          "choiceIdentifier" => "choice0",
+          "choiceAttribute"  => "selected",
+          "attributeSetting" => 1,
+        },
+        {
+          "choiceIdentifier" => "choice1",
+          "choiceAttribute"  => "selected",
+          "attributeSetting" => 1,
+        },
+        {
+          "choiceIdentifier" => "choice2",
+          "choiceAttribute"  => "selected",
+          "attributeSetting" => 1,
+        },
+        {
+          "choiceIdentifier" => "choice3",
+          "choiceAttribute"  => "selected",
+          "attributeSetting" => 1,
+        },
+        {
+          "choiceIdentifier" => "choice4",
+          "choiceAttribute"  => "selected",
+          "attributeSetting" => 1,
+        },
+        {
+          "choiceIdentifier" => "choice5",
+          "choiceAttribute"  => "selected",
+          "attributeSetting" => 1,
+        },
+        {
+          "choiceIdentifier" => "choice19",
+          "choiceAttribute"  => "selected",
+          "attributeSetting" => 1,
+        },
+        {
           "choiceIdentifier" => "choice21",
           "choiceAttribute"  => "selected",
           "attributeSetting" => 0,
