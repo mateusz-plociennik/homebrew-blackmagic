@@ -4,8 +4,8 @@ on:
   # No `push` on main: every change lands via a PR that already ran this, and direct pushes are
   # gated by `.githooks/pre-commit` running `bin/verify`.
   pull_request:
-  # `bump.yml` dispatches this for each bump PR it opens: a PR authored by `GITHUB_TOKEN` fires no
-  # `pull_request` run, but `workflow_dispatch` is exempt from that rule.
+  # `bump.yml` dispatches this for each bump PR it opens: a PR authored by `GITHUB_TOKEN` only gets a
+  # `pull_request` run that waits for manual approval, but `workflow_dispatch` is exempt from that rule.
   workflow_dispatch:
     inputs:
       pr:
@@ -80,14 +80,26 @@ jobs:
       - name: Run the Copilot assignment tests
         run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/assign_copilot_test.rb"
 
+      - name: Run the factory loop tests
+        run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/factory_pr_test.rb"
+
+      - name: Run the bump and run-report tests
+        run: brew ruby "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/bump_casks_test.rb"
+
       - name: Run the changed-casks tests
         run: bash "$(brew --repo ${{ steps.set-up-homebrew.outputs.tap-name }})/test/changed_casks_test.sh"
 
-  install:
+  install-on:
     # What the offline checks cannot prove about a new release: that its `pkg` name still matches, and
     # that `uninstall pkgutil:` removes every receipt it writes. Downloads the artifact, so PRs only.
     if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
-    runs-on: macos-15-intel
+    # `macos-latest` is Apple silicon, where an Intel-only cask refuses to install. Each runner installs
+    # only the casks it can, so every cask is installed exactly once; `install` below requires both.
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-latest, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
     env:
       # Resolve: same reason as `audit-online.yml`, registration-path casks need a real identity.
       # Cintel: its uninstall script deactivates a driver extension, which waits for user approval.
@@ -136,6 +148,13 @@ jobs:
             case " $SKIP_CASKS " in
               *" $cask "*) echo "::notice::Skipping $cask: cannot install unattended, install it locally"; continue ;;
             esac
+            # Read through Homebrew, which normalises `arch: :intel` and `arch: :x86_64` alike.
+            intel_only=$(brew info --cask --json=v2 "$TAP/$cask" |
+                           jq '[.casks[0].depends_on.arch[]?.type] | . == ["intel"]')
+            if [[ "$intel_only" != "$([[ $(uname -m) == x86_64 ]] && echo true || echo false)" ]]; then
+              echo "Leaving $cask to the other install runner"
+              continue
+            fi
             echo "::group::$cask"
             # Outside any `if`, so a failing pkgutil stops the step instead of reading as no receipts.
             pkgutil --pkgs > "$snapshots/before"
@@ -152,3 +171,15 @@ jobs:
           done
 
           [ -z "$failed" ] || { echo "Failed:$failed"; exit 1; }
+
+  install:
+    # The check the `main` ruleset requires: passes only when every runner installed its casks, so an
+    # Intel-only change cannot pass on the Apple silicon runner having skipped everything.
+    needs: install-on
+    if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every install runner to pass
+        env:
+          RESULT: ${{ needs.install-on.result }}
+        run: '[ "$RESULT" = success ] || { echo "::error::install runners: $RESULT"; exit 1; }'
