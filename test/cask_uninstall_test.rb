@@ -44,6 +44,27 @@ check("Cintel removes both orphaned helper jobs, plists and the privileged helpe
   ]
 end
 
+web_presenter = Cask::CaskLoader.load(File.read(File.expand_path("../Casks/blackmagic-web-presenter.rb", __dir__)))
+streaming = Cask::CaskLoader.load(File.read(File.expand_path("../Casks/blackmagic-streaming.rb", __dir__)))
+
+check("Web Presenter does not uninstall files or receipts shared with Streaming") do
+  uninstall_artifacts = [
+    Cask::Artifact::Uninstall,
+    Cask::Artifact::UninstallPreflightSteps,
+    Cask::Artifact::UninstallPostflightSteps,
+    Cask::Artifact::Zap,
+  ]
+  streaming_uninstall = streaming.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
+  shared_receipts = %w[
+    ^com\.blackmagic-design\.WebPresenter$
+    ^com\.blackmagic-design\.WebPresenterAssets$
+    ^com\.blackmagic-design\.WebPresenterUninstaller$
+  ]
+
+  web_presenter.artifacts.none? { |artifact| uninstall_artifacts.any? { |type| artifact.is_a?(type) } } &&
+    streaming_uninstall.fetch(:pkgutil) == shared_receipts
+end
+
 casks = Dir[File.expand_path("../Casks/*.rb", __dir__)].map do |path|
   [File.basename(path), Cask::CaskLoader.load(File.read(path))]
 end

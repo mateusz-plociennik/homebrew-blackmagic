@@ -91,7 +91,7 @@ jobs:
 
   install-on:
     # What the offline checks cannot prove about a new release: that its `pkg` name still matches, and
-    # that `uninstall pkgutil:` removes every receipt it writes. Downloads the artifact, so PRs only.
+    # that uninstall removes its package receipts. Downloads the artifact, so PRs only.
     if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     # `macos-latest` is Apple silicon, where an Intel-only cask refuses to install. Each runner installs
     # only the casks it can, so every cask is installed exactly once; `install` below requires both.
@@ -105,6 +105,7 @@ jobs:
       # Cintel: its uninstall script deactivates a driver extension, which waits for user approval.
       # Resolve Studio: uninstall deliberately keeps the Fairlight driver and RAW Player receipts, as
       # Blackmagic's uninstaller does, so receipt equality cannot hold.
+      # Web Presenter is checked separately below because its files and receipts are shared with Streaming.
       SKIP_CASKS: blackmagic-davinci-resolve blackmagic-davinci-resolve-studio blackmagic-cintel
     steps:
       - name: Set up Homebrew
@@ -145,8 +146,47 @@ jobs:
 
           failed=""
           for cask in $CASKS; do
+            if [ "$cask" = blackmagic-web-presenter ]; then
+              echo "::group::$cask"
+              if brew install --cask "$TAP/$cask"; then
+                receipts=$(pkgutil --pkgs)
+                for receipt in \
+                  com.blackmagic-design.WebPresenter \
+                  com.blackmagic-design.WebPresenterAssets \
+                  com.blackmagic-design.WebPresenterUninstaller; do
+                  if ! grep -Fxq "$receipt" <<<"$receipts"; then
+                    echo "::error::$cask did not install receipt $receipt"
+                    failed="$failed $cask"
+                  fi
+                done
+                app="/Applications/Blackmagic Web Presenter/Blackmagic Web Presenter Setup.app"
+                [ -d "$app" ] || { echo "::error::$cask did not install $app"; failed="$failed $cask"; }
+                if brew uninstall --cask "$TAP/$cask"; then
+                  receipts=$(pkgutil --pkgs)
+                  for receipt in \
+                    com.blackmagic-design.WebPresenter \
+                    com.blackmagic-design.WebPresenterAssets \
+                    com.blackmagic-design.WebPresenterUninstaller; do
+                    if ! grep -Fxq "$receipt" <<<"$receipts"; then
+                      echo "::error::$cask removed shared receipt $receipt"
+                      failed="$failed $cask"
+                    fi
+                  done
+                  [ -d "$app" ] || { echo "::error::$cask removed shared app $app"; failed="$failed $cask"; }
+                else
+                  failed="$failed $cask"
+                fi
+              else
+                failed="$failed $cask"
+              fi
+              echo "::endgroup::"
+              continue
+            fi
             case " $SKIP_CASKS " in
-              *" $cask "*) echo "::notice::Skipping $cask: cannot install unattended, install it locally"; continue ;;
+              *" $cask "*)
+                echo "::notice::Skipping $cask: cannot install unattended, install it locally"
+                continue
+                ;;
             esac
             # Read through Homebrew, which normalises `arch: :intel` and `arch: :x86_64` alike.
             intel_only=$(brew info --cask --json=v2 "$TAP/$cask" |

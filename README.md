@@ -38,17 +38,24 @@ Some casks install a full vendor bundle:
 - `blackmagic-cintel` also installs Desktop Video drivers, Media Express and Disk Speed Test.
 - `blackmagic-davinci-resolve` and `blackmagic-davinci-resolve-studio` also install control panel
   support, the Fairlight Audio Accelerator driver and the Blackmagic RAW Player.
+- `blackmagic-web-presenter` and `blackmagic-streaming` share the Web Presenter app bundle and package
+  receipts. Uninstalling the Web Presenter cask deliberately leaves the shared files and receipts in
+  place so Streaming remains usable. Its vendor uninstaller deletes the whole shared bundle and
+  forgets those receipts; run it only after confirming neither product is needed.
 
-These casks remove the same items as the vendor uninstaller. The vendor uninstaller can remove
+Where a cask runs the vendor uninstaller, it removes the same items. Vendor uninstallers can remove
 shared components that other Blackmagic products use. If this occurs, install the affected products
 again. Items that the vendor uninstaller keeps, for example the Blackmagic RAW Player, stay installed
-and keep their package receipts. The cask files contain notes that tell you how to change this
-policy.
+and keep their package receipts. The cask files contain notes that tell you how to change this policy.
 
 ## Registration details
 
 Most Blackmagic downloads are anonymous. You can install them with no configuration. DaVinci Resolve
 Studio is an anonymous download, but you must have a licence to activate it.
+
+Blackmagic Web Presenter also downloads anonymously, with no catalog registration or terms gate. This
+does not waive the included software licence or any applicable activation requirements; review and
+accept the licence only if you agree.
 
 Some downloads, for example the free edition of DaVinci Resolve, are available only after
 registration. For these downloads, write your registration details in

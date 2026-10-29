@@ -23,15 +23,20 @@ STUB_GH = <<~'SH'
       sha=${args##*--commit }; sha=${sha%% *}
       while [[ $# -gt 0 && "$1" != --jq ]]; do shift; done
       jq -r "$2" <<<"$(cat "$FIXTURES/run-$sha" 2>/dev/null || echo '[]')" ;;
-    "pr diff") printf '+++ b/Casks/blackmagic-x.rb\n-  version "1.1"\n+  version "1.2"\n' ;;
+    "pr diff") printf "+++ b/Casks/%s.rb\n-  version \"1.1\"\n+  version \"1.2\"\n" "$CASK" ;;
     "workflow run") [[ -e "$FIXTURES/dispatch-fails-${args##*pr=}" ]] && exit 1; true ;;
-    "pr comment") [[ -e "$FIXTURES/comment-fails-$3" ]] && exit 1; true ;;
+    "pr comment")
+      [[ -e "$FIXTURES/comment-fails-$3" ]] && exit 1
+      cat "${args##*--body-file }" >> "$FIXTURES/comment"
+      true
+      ;;
     "pr view") [[ -e "$FIXTURES/commented-$3" ]] && echo 1 || echo 0 ;;
   esac
 SH
 
 # Runs the script against `prs` (lines of "number branch sha"); returns [success?, calls made].
-def dispatch(prs, runs: [], gated: [], failing: [], failing_comments: [], commented: [], pr_list_fails: false)
+def dispatch(prs, cask: "blackmagic-x", runs: [], gated: [], failing: [], failing_comments: [],
+             commented: [], pr_list_fails: false)
   Dir.mktmpdir do |dir|
     File.write("#{dir}/gh", STUB_GH)
     File.chmod(0755, "#{dir}/gh")
@@ -42,10 +47,12 @@ def dispatch(prs, runs: [], gated: [], failing: [], failing_comments: [], commen
     failing_comments.each { |pr| File.write("#{dir}/comment-fails-#{pr}", "") }
     commented.each { |pr| File.write("#{dir}/commented-#{pr}", "") }
     File.write("#{dir}/pr-list-fails", "") if pr_list_fails
-    env = { "PATH" => "#{dir}:#{ENV.fetch("PATH")}", "FIXTURES" => dir, "REPO" => "o/r", "TAP" => "o/t" }
+    env = { "PATH" => "#{dir}:#{ENV.fetch("PATH")}", "FIXTURES" => dir, "REPO" => "o/r", "TAP" => "o/t",
+            "CASK" => cask }
     _, status = Open3.capture2e(env, DISPATCH_SCRIPT)
     calls = File.exist?("#{dir}/log") ? File.readlines("#{dir}/log", chomp: true) : []
-    [status.success?, calls]
+    comment = File.exist?("#{dir}/comment") ? File.read("#{dir}/comment") : ""
+    [status.success?, calls, comment]
   end
 end
 
@@ -102,6 +109,21 @@ end
 check("no open PRs is a successful no-op") do
   ok, calls = dispatch([])
   ok && dispatched(calls).empty?
+end
+
+check("Web Presenter bump instructions explain the shared-payload coexistence check") do
+  ok, calls, comment = dispatch(["7 bump-blackmagic-web-presenter-3.6 aaa"], cask: "blackmagic-web-presenter")
+  ok && commented(calls) == ["7"] &&
+    comment.include?("verifies the package and shared app/receipts") &&
+    comment.include?("install both on a disposable Mac, uninstall Web Presenter")
+end
+
+check("a cask in the CI skip list gets local verification instructions") do
+  ok, calls, comment = dispatch(["8 bump-blackmagic-cintel-7.1 bbb"], cask: "blackmagic-cintel")
+  ok && commented(calls) == ["8"] &&
+    comment.include?("install job skips `blackmagic-cintel`") &&
+    comment.include?("brew install --cask o/t/blackmagic-cintel && brew uninstall --cask blackmagic-cintel") &&
+    comment.exclude?("CI green → merge")
 end
 
 report_failures!
