@@ -26,7 +26,18 @@ cask "blackmagic-decklink" do
   container nested: "DeckLink #{version}.dmg"
 
   pkg "DeckLink Installer #{version}.mpkg",
-      choices: [
+      choices: (0..5).map { |choice|
+        {
+          "choiceIdentifier" => "choice#{choice}",
+          "choiceAttribute"  => "selected",
+          "attributeSetting" => 1,
+        }
+      } + [
+        {
+          "choiceIdentifier" => "choice19",
+          "choiceAttribute"  => "selected",
+          "attributeSetting" => 1,
+        },
         {
           "choiceIdentifier" => "choice21",
           "choiceAttribute"  => "selected",

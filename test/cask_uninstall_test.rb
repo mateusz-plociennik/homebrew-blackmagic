@@ -54,6 +54,18 @@ end
 
 check("DeckLink excludes the Apple codec and targets its exact package receipts") do
   decklink_pkg.stanza_options.fetch(:choices) == [
+    *(0..5).map do |choice|
+      {
+        "choiceIdentifier" => "choice#{choice}",
+        "choiceAttribute"  => "selected",
+        "attributeSetting" => 1,
+      }
+    end,
+    {
+      "choiceIdentifier" => "choice19",
+      "choiceAttribute"  => "selected",
+      "attributeSetting" => 1,
+    },
     {
       "choiceIdentifier" => "choice21",
       "choiceAttribute"  => "selected",
