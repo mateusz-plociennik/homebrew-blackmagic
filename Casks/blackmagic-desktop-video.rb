@@ -22,35 +22,12 @@ cask "blackmagic-desktop-video" do
 
   pkg "Install Desktop Video #{version}.pkg"
 
-  # The vendor scripts deactivate the driver extension and remove payloads shared with Cintel and
-  # Streaming. They also clear legacy receipts; reinstall products that share those files afterward.
-  # Keep Homebrew's receipt list to the five exact IDs in the 16.4 installer.
-  # Vendor cleanup leaves the DesktopVideoHelper job and files created by driver deactivation.
-  # To retain shared payloads instead, remove both scripts and the receipt patterns.
-  uninstall early_script: {
-              executable: "Uninstall Desktop Video.app/Contents/Resources/uninstall_uid_root.sh",
-              args:       ["", "#{staged_path}/Uninstall Desktop Video.app/Contents/Resources"],
-              sudo:       true,
-            },
-            launchctl:    [
-              "com.blackmagic-design.desktopvideo.helper",
-              "com.blackmagic-design.DesktopVideoDriverExtension.Helper",
-            ],
-            script:       {
-              executable: "Uninstall Desktop Video.app/Contents/Resources/uninstall.sh",
-              args:       ["", "#{staged_path}/Uninstall Desktop Video.app/Contents/Resources"],
-              sudo:       true,
-            },
-            pkgutil:      [
-              "^com\\.blackmagic-design\\.DesktopVideo$",
-              "^com\\.blackmagic-design\\.DesktopVideoAssets$",
-              "^com\\.blackmagic-design\\.DesktopVideoUninstaller$",
-              "^com\\.blackmagic-design\\.DiskSpeedTest$",
-              "^com\\.blackmagic-design\\.MediaExpress$",
-            ],
-            delete:       [
-              "/Library/LaunchDaemons/com.blackmagic-design.DesktopVideoDriverExtension.Helper.plist",
-              "/Library/LaunchDaemons/com.blackmagic-design.DesktopVideoHelper.plist",
-              "/Library/PrivilegedHelperTools/com.blackmagic-design.DesktopVideoDriverExtension.Helper",
+  # The vendor uninstaller also removes drivers, apps and helpers shared with Cintel and Streaming.
+  # Forget only this cask's uninstaller receipt and remove its manuals and uninstaller app; retain the
+  # shared runtime receipts and payloads to preserve those products' shared components.
+  uninstall pkgutil: "^com\\.blackmagic-design\\.DesktopVideoUninstaller$",
+            delete:  [
+              "/Applications/Blackmagic Desktop Video/Documents",
+              "/Applications/Blackmagic Desktop Video/Uninstall Desktop Video.app",
             ]
 end

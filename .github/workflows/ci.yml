@@ -96,11 +96,10 @@ jobs:
     runs-on: macos-latest
     env:
       # Resolve: same reason as `audit-online.yml`, registration-path casks need a real identity.
-      # Desktop Video and Cintel: their uninstall scripts deactivate a driver extension, which waits
-      # for user approval.
+      # Cintel: its uninstall script deactivates a driver extension, which waits for user approval.
       # Resolve Studio: uninstall deliberately keeps the Fairlight driver and RAW Player receipts, as
       # Blackmagic's uninstaller does, so receipt equality cannot hold.
-      SKIP_CASKS: blackmagic-davinci-resolve blackmagic-davinci-resolve-studio blackmagic-cintel blackmagic-desktop-video
+      SKIP_CASKS: blackmagic-davinci-resolve blackmagic-davinci-resolve-studio blackmagic-cintel
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
@@ -137,6 +136,21 @@ jobs:
           [ -n "$CASKS" ] || { echo "No casks changed"; exit 0; }
           compare="$(brew --repo "$TAP")/bin/compare-receipts"
           snapshots=$(mktemp -d)
+          desktop_video_shared_receipts="$snapshots/desktop-video-shared-receipts"
+          cat > "$desktop_video_shared_receipts" <<'RECEIPTS'
+          com.blackmagic-design.DesktopVideo
+          com.blackmagic-design.DesktopVideoAssets
+          com.blackmagic-design.DiskSpeedTest
+          com.blackmagic-design.MediaExpress
+          RECEIPTS
+          desktop_video_installed_receipts="$snapshots/desktop-video-installed-receipts"
+          cat > "$desktop_video_installed_receipts" <<'RECEIPTS'
+          com.blackmagic-design.DesktopVideo
+          com.blackmagic-design.DesktopVideoAssets
+          com.blackmagic-design.DesktopVideoUninstaller
+          com.blackmagic-design.DiskSpeedTest
+          com.blackmagic-design.MediaExpress
+          RECEIPTS
 
           failed=""
           for cask in $CASKS; do
@@ -146,14 +160,66 @@ jobs:
             echo "::group::$cask"
             # Outside any `if`, so a failing pkgutil stops the step instead of reading as no receipts.
             pkgutil --pkgs > "$snapshots/before"
-            if brew install --cask "$TAP/$cask" && brew uninstall --cask "$TAP/$cask"; then
-              pkgutil --pkgs > "$snapshots/after"
-              if ! diff=$("$compare" "$snapshots/before" "$snapshots/after"); then
-                echo "::error::$cask ${diff//$'\n'/; }"
-                failed="$failed $cask"
+            install_failed=0
+            if brew install --cask "$TAP/$cask"; then
+              if [ "$cask" = blackmagic-desktop-video ]; then
+                pkgutil --pkgs > "$snapshots/desktop-video-installed"
+                comm -13 <(sort -u "$snapshots/before") <(sort -u "$snapshots/desktop-video-installed") \
+                  > "$snapshots/desktop-video-added"
+                if ! diff -u <(sort -u "$desktop_video_installed_receipts") "$snapshots/desktop-video-added"; then
+                  echo "::error::Desktop Video did not install exactly its five expected receipts"
+                  failed="$failed $cask"
+                fi
               fi
             else
               failed="$failed $cask"
+              install_failed=1
+            fi
+            if [ "$install_failed" -eq 0 ]; then
+              if brew uninstall --cask "$TAP/$cask"; then
+                pkgutil --pkgs > "$snapshots/after"
+                if [ "$cask" = blackmagic-desktop-video ]; then
+                  sort -u "$snapshots/after" > "$snapshots/desktop-video-after.sorted"
+                  comm -13 <(sort -u "$snapshots/before") "$snapshots/desktop-video-after.sorted" \
+                    > "$snapshots/desktop-video-retained"
+                  if ! diff -u <(sort -u "$desktop_video_shared_receipts") "$snapshots/desktop-video-retained"; then
+                    echo "::error::Desktop Video did not retain exactly the shared runtime receipts"
+                    failed="$failed $cask"
+                  fi
+                  removed_receipts="$(comm -23 <(sort -u "$snapshots/before") "$snapshots/desktop-video-after.sorted")"
+                  if [ -n "$removed_receipts" ]; then
+                    echo "::error::Desktop Video uninstall removed pre-existing receipts: ${removed_receipts//$'\n'/; }"
+                    failed="$failed $cask"
+                  fi
+                  for path in \
+                    "/Applications/Blackmagic Desktop Video/Desktop Video Setup.app" \
+                    "/Applications/Blackmagic Desktop Video/Media Player Setup.app" \
+                    "/Applications/Blackmagic Media Express.app" \
+                    "/Applications/Blackmagic Disk Speed Test.app" \
+                    "/Library/Frameworks/DeckLinkAPI.framework" \
+                    "/Library/Application Support/Blackmagic Design/Blackmagic Desktop Video Driver Extension.app" \
+                    "/Library/Application Support/Blackmagic Design/Streaming/BMDStreamingAPI.bundle" \
+                    "/Library/LaunchDaemons/com.blackmagic-design.DesktopVideoHelper.plist"; do
+                    if [ ! -e "$path" ]; then
+                      echo "::error::Desktop Video uninstall removed shared payload $path"
+                      failed="$failed $cask"
+                    fi
+                  done
+                  for path in \
+                    "/Applications/Blackmagic Desktop Video/Documents" \
+                    "/Applications/Blackmagic Desktop Video/Uninstall Desktop Video.app"; do
+                    if [ -e "$path" ]; then
+                      echo "::error::Desktop Video uninstall left product-owned payload $path"
+                      failed="$failed $cask"
+                    fi
+                  done
+                elif ! diff=$("$compare" "$snapshots/before" "$snapshots/after"); then
+                  echo "::error::$cask ${diff//$'\n'/; }"
+                  failed="$failed $cask"
+                fi
+              else
+                failed="$failed $cask"
+              fi
             fi
             echo "::endgroup::"
           done

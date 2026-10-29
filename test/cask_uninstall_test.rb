@@ -47,35 +47,16 @@ end
 desktop_video = Cask::CaskLoader.load(File.read(File.expand_path("../Casks/blackmagic-desktop-video.rb", __dir__)))
 desktop_video_uninstall = desktop_video.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
 
-check("Desktop Video invokes both vendor scripts with the staged resources") do
-  resources = "#{desktop_video.staged_path}/Uninstall Desktop Video.app/Contents/Resources"
-  early_script = desktop_video_uninstall.fetch(:early_script)
-  script = desktop_video_uninstall.fetch(:script)
-  early_script.fetch(:executable) == "Uninstall Desktop Video.app/Contents/Resources/uninstall_uid_root.sh" &&
-    early_script.fetch(:args) == ["", resources] && early_script.fetch(:sudo) &&
-    script.fetch(:executable) == "Uninstall Desktop Video.app/Contents/Resources/uninstall.sh" &&
-    script.fetch(:args) == ["", resources] && script.fetch(:sudo)
-end
-
-check("Desktop Video forgets only the five exact 16.4 installer receipts") do
-  desktop_video_uninstall.fetch(:pkgutil) == [
-    "^com\\.blackmagic-design\\.DesktopVideo$",
-    "^com\\.blackmagic-design\\.DesktopVideoAssets$",
-    "^com\\.blackmagic-design\\.DesktopVideoUninstaller$",
-    "^com\\.blackmagic-design\\.DiskSpeedTest$",
-    "^com\\.blackmagic-design\\.MediaExpress$",
+check("Desktop Video removes only its manuals and uninstaller app") do
+  desktop_video_uninstall.fetch(:delete) == [
+    "/Applications/Blackmagic Desktop Video/Documents",
+    "/Applications/Blackmagic Desktop Video/Uninstall Desktop Video.app",
   ]
 end
 
-check("Desktop Video removes both orphaned helper jobs, plists and the privileged helper") do
-  desktop_video_uninstall.fetch(:launchctl) == [
-    "com.blackmagic-design.desktopvideo.helper",
-    "com.blackmagic-design.DesktopVideoDriverExtension.Helper",
-  ] && desktop_video_uninstall.fetch(:delete) == [
-    "/Library/LaunchDaemons/com.blackmagic-design.DesktopVideoDriverExtension.Helper.plist",
-    "/Library/LaunchDaemons/com.blackmagic-design.DesktopVideoHelper.plist",
-    "/Library/PrivilegedHelperTools/com.blackmagic-design.DesktopVideoDriverExtension.Helper",
-  ]
+check("Desktop Video keeps the shared runtime receipts, apps and helpers") do
+  desktop_video_uninstall.fetch(:pkgutil) == "^com\\.blackmagic-design\\.DesktopVideoUninstaller$" &&
+    !desktop_video_uninstall.keys.intersect?([:early_script, :launchctl, :script])
 end
 
 casks = Dir[File.expand_path("../Casks/*.rb", __dir__)].map do |path|

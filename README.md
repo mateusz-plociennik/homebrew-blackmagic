@@ -36,17 +36,16 @@ Some casks install a full vendor bundle:
 
 - `blackmagic-camera` also installs the Blackmagic RAW tools and plug-ins.
 - `blackmagic-desktop-video` and `blackmagic-cintel` install shared Desktop Video drivers, Media
-  Express and Disk Speed Test. The Desktop Video vendor uninstaller also removes shared Streaming
-  support. Reinstall Cintel or Streaming after uninstalling a product that removes components they
-  use.
+  Express and Disk Speed Test. Uninstalling Desktop Video removes its manuals and uninstaller app,
+  but keeps the shared drivers, applications, helpers and receipts to preserve Cintel and Streaming's
+  shared payloads. The vendor uninstaller removes those shared components and is not used by the cask.
 - `blackmagic-davinci-resolve` and `blackmagic-davinci-resolve-studio` also install control panel
   support, the Fairlight Audio Accelerator driver and the Blackmagic RAW Player.
 
-These casks remove the same items as the vendor uninstaller. The vendor uninstaller can remove
-shared components that other Blackmagic products use. If this occurs, install the affected products
-again. Items that the vendor uninstaller keeps, for example the Blackmagic RAW Player, stay installed
-and keep their package receipts. The cask files contain notes that tell you how to change this
-policy.
+Some casks invoke the vendor uninstaller, which can remove shared components that other Blackmagic
+products use. Their cask files document any shared-payload behavior. If an uninstaller removes a
+component another product uses, reinstall the affected product. Items the vendor uninstaller keeps,
+for example the Blackmagic RAW Player, stay installed and keep their package receipts.
 
 ## Registration details
 
