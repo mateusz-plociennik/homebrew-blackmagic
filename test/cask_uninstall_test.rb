@@ -68,6 +68,23 @@ check("HyperDeck removes only its app, support files, and copied Avid templates"
   ]
 end
 
+control_for_arduino = Cask::CaskLoader.load(
+  File.read(File.expand_path("../Casks/blackmagic-control-for-arduino.rb", __dir__)),
+)
+control_for_arduino_uninstall = control_for_arduino.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
+
+check("Control for Arduino runs its uninstaller and removes only its exact package receipts") do
+  script = control_for_arduino_uninstall.fetch(:script)
+  script.fetch(:executable) ==
+    "Uninstall Blackmagic Shield for Arduino.app/Contents/Resources/uninstall.sh" &&
+    script.fetch(:sudo) &&
+    control_for_arduino_uninstall.fetch(:pkgutil) == [
+      "^com\\.blackmagic-design\\.CameraControl$",
+      "^com\\.blackmagic-design\\.CameraControlAssets$",
+      "^com\\.blackmagic-design\\.CameraControlUninstaller$",
+    ]
+end
+
 casks = Dir[File.expand_path("../Casks/*.rb", __dir__)].map do |path|
   [File.basename(path), Cask::CaskLoader.load(File.read(path))]
 end

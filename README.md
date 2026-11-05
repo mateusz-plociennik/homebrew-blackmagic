@@ -6,6 +6,14 @@ official Blackmagic download endpoints. You do not use the Blackmagic web downlo
 All casks have the prefix `blackmagic-`. Thus, the tokens do not collide with homebrew-cask, and
 you can type `blackmagic-` and press TAB to see all casks.
 
+## Disclaimer
+
+This tap is unofficial and independent of [Blackmagic Design](https://www.blackmagicdesign.com/).
+
+Developed entirely from publicly accessible web forms and standard network requests, this tap
+mimics basic browser downloads. It does not circumvent registration, software licensing, or payments. 
+All official Blackmagic Design licensing terms apply.
+
 ## Install
 
 1. Add the tap:
@@ -102,7 +110,11 @@ these steps:
 
 The tap reads this key only from the config file. No environment variable sets it. The tap tells
 Blackmagic that you accept the licence, so you must accept it deliberately. At this time, no cask
-in this tap uses a licence agreement.
+in this tap uses a download-time licence agreement.
+
+Some installers present their own licence agreements, which you must review and accept yourself.
+For example, Control for Arduino's anonymous download does not grant a software licence or bypass any
+applicable licensing or activation requirements.
 
 ## Updates
 
@@ -139,9 +151,3 @@ install stops.
 ## Contributing
 
 Refer to [`CONTRIBUTING.md`](CONTRIBUTING.md).
-
-## Disclaimer
-
-This tap is unofficial. It has no relation to Blackmagic Design. The tap sends the same requests
-and the same data as a browser that uses the Blackmagic download form. It does not bypass
-registration, licences or payment. The Blackmagic licence terms apply to all Blackmagic software.
