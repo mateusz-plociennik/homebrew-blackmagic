@@ -30,6 +30,28 @@ check("Camera forgets only the two bundled RAW receipts, guarded by their existe
   end
 end
 
+ultimatte_12 = Cask::CaskLoader.load(File.read(File.expand_path("../Casks/blackmagic-ultimatte-12.rb", __dir__)))
+ultimatte_12_uninstall = ultimatte_12.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
+
+check("Ultimatte 12 invokes its vendor uninstaller and forgets only its exact shared receipts") do
+  ultimatte_12_uninstall.fetch(:script) == {
+    executable: "Uninstall Ultimatte.app/Contents/Resources/uninstall.sh",
+    sudo:       true,
+  } && ultimatte_12_uninstall.fetch(:pkgutil) == [
+    "^com\\.blackmagic-design\\.Ultimatte$",
+    "^com\\.blackmagic-design\\.UltimatteAssets$",
+    "^com\\.blackmagic-design\\.UltimatteUninstaller$",
+  ]
+end
+
+check("Ultimatte 12 conflicts with the separate Ultimatte release") do
+  ultimatte_12.conflicts_with.fetch(:cask).include?("blackmagic-ultimatte")
+end
+
+check("Ultimatte 12 caveats require Rosetta") do
+  ultimatte_12.caveats_object.invoked?(:requires_rosetta)
+end
+
 cintel = Cask::CaskLoader.load(File.read(File.expand_path("../Casks/blackmagic-cintel.rb", __dir__)))
 cintel_uninstall = cintel.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
 

@@ -46,6 +46,10 @@ Some casks install a full vendor bundle:
 - `blackmagic-cintel` also installs Desktop Video drivers, Media Express and Disk Speed Test.
 - `blackmagic-davinci-resolve` and `blackmagic-davinci-resolve-studio` also install control panel
   support, the Fairlight Audio Accelerator driver and the Blackmagic RAW Player.
+- Ultimatte 12 1.0 and the separate Ultimatte 2.4.1 release share three package receipts and
+  `/Applications/Blackmagic Ultimatte`; they cannot coexist. Uninstalling either removes the shared
+  directory, so reinstall the release you still need. Ultimatte 12's setup app is Intel-only and
+  needs Rosetta 2 on Apple Silicon.
 - `blackmagic-teranex` also installs the Teranex Mini component. It removes the bundled Teranex
   receipts by exact ID rather than deleting receipts by a shared prefix. It requires macOS 11 Big Sur
   or later; the installer supports both Apple silicon and Intel Macs.
@@ -82,6 +86,10 @@ the download only; it does not waive any separate Blackmagic licence or activati
 
 Teranex currently has no registration or download-terms gate in the catalog. Anonymous access does not
 grant a software or hardware licence or bypass any activation requirement.
+
+Ultimatte 12 1.0 has no catalog registration or download-terms gate. Its installer includes a licence
+that you must review and accept if prompted; the release notes describe USB hardware setup and
+firmware updates, with no separate software activation step.
 
 Some downloads, for example the free edition of DaVinci Resolve, are available only after
 registration. For these downloads, write your registration details in
