@@ -103,7 +103,7 @@ before you change the download, resolve or config logic.
 | Workflow | Trigger | Function |
 |---|---|---|
 | `ci.yml` | Pull request | Runs the `bin/verify` checks. On macOS, installs and uninstalls each cask that the pull request changes. |
-| `bump.yml` | Monday and Thursday | Runs `brew bump` for each cask and opens a pull request for each new release. Starts `ci.yml` for these pull requests. A release that needs registration gets a `Manual bump:` issue instead. |
+| `bump.yml` | Monday and Thursday | Runs `brew bump` for each cask and opens a pull request for each new release. Starts `ci.yml` for these pull requests. A release that needs registration uses the `bmd-registration` secrets. If they are not set, it gets a `Manual bump:` issue instead. |
 | `audit-online.yml` | Monday | Runs `brew audit --cask --online`. This downloads each full artifact. |
 | `copilot-issue.yml` | Issue and pull request events | Assigns `ready-for-agent` issues to the Copilot coding agent. |
 | `factory-pr.yml` | Every 10 minutes, CI and review completions, pull request events | Moves each factory pull request one step through the loop below. |
@@ -149,6 +149,24 @@ Secrets:
   `contents: write` for that (cli/cli#8910).
 - `COPILOT_REVIEW_TOKEN`: a fine-grained PAT with only the **Copilot Requests** permission and no
   repository access. Only the review step can read it.
+
+### Registration details for scheduled runs
+
+`audit-online.yml` and `bump.yml` download releases that need Blackmagic registration, such as
+DaVinci Resolve. They read the owner's details from the `bmd-registration` environment. These
+details are never in the repository.
+
+1. In Settings → Environments, create `bmd-registration`. Set **Deployment branches** to `main` only.
+   Do not add required reviewers, because they block scheduled runs. Only workflows on `main` can
+   read the secrets, so pull request code cannot read them.
+2. Add one environment secret for each field. GitHub then masks each value in logs on its own:
+   `HOMEBREW_BMD_TAP_FIRSTNAME`, `HOMEBREW_BMD_TAP_LASTNAME`, `HOMEBREW_BMD_TAP_EMAIL`,
+   `HOMEBREW_BMD_TAP_PHONE`, `HOMEBREW_BMD_TAP_COMPANY`, `HOMEBREW_BMD_TAP_STREET`,
+   `HOMEBREW_BMD_TAP_CITY`, `HOMEBREW_BMD_TAP_STATE`, and optionally `HOMEBREW_BMD_TAP_COUNTRY`
+   (default `au`). The `HOMEBREW_` prefix is required, because `brew` drops every other variable.
+
+Each run that downloads such a release registers you with Blackmagic again. The environment cannot
+accept licence terms (`agreeToTerms`), so a release that needs terms still fails in CI.
 
 ## Issues and labels
 

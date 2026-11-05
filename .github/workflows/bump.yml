@@ -37,6 +37,9 @@ jobs:
   bump:
     # macOS: `bump-cask-pr` runs `brew audit --online`, which extracts the DMG with `hdiutil`.
     runs-on: macos-latest
+    # Holds the owner's `HOMEBREW_BMD_TAP_*` registration secrets, used by `Run brew bump` only. See
+    # `audit-online.yml` and CONTRIBUTING.md.
+    environment: bmd-registration
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
@@ -48,6 +51,8 @@ jobs:
           token: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
           brew-gh-api-token: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
           cask: true
+          # Off even on an Actions debug re-run; see `audit-online.yml`.
+          debug: false
 
       - name: Cache Homebrew Bundler RubyGems
         uses: actions/cache@v4
@@ -98,6 +103,17 @@ jobs:
           REPO: ${{ github.repository }}
           TAP: ${{ steps.set-up-homebrew.outputs.tap-name }}
           REPORT_ONLY: ${{ inputs.report-only }}
+          # Lets `bump-cask-pr` download releases that need registration (#107). Unset, the script
+          # files a manual-bump issue instead.
+          HOMEBREW_BMD_TAP_FIRSTNAME: ${{ secrets.HOMEBREW_BMD_TAP_FIRSTNAME }}
+          HOMEBREW_BMD_TAP_LASTNAME: ${{ secrets.HOMEBREW_BMD_TAP_LASTNAME }}
+          HOMEBREW_BMD_TAP_EMAIL: ${{ secrets.HOMEBREW_BMD_TAP_EMAIL }}
+          HOMEBREW_BMD_TAP_PHONE: ${{ secrets.HOMEBREW_BMD_TAP_PHONE }}
+          HOMEBREW_BMD_TAP_COMPANY: ${{ secrets.HOMEBREW_BMD_TAP_COMPANY }}
+          HOMEBREW_BMD_TAP_STREET: ${{ secrets.HOMEBREW_BMD_TAP_STREET }}
+          HOMEBREW_BMD_TAP_CITY: ${{ secrets.HOMEBREW_BMD_TAP_CITY }}
+          HOMEBREW_BMD_TAP_STATE: ${{ secrets.HOMEBREW_BMD_TAP_STATE }}
+          HOMEBREW_BMD_TAP_COUNTRY: ${{ secrets.HOMEBREW_BMD_TAP_COUNTRY }}
         # `--no-fork` (in the script) pushes the bump branch to this repository rather than a fork;
         # the token above is what authorises that push.
         run: '"$(brew --repo "$TAP")/bin/bump-casks"'

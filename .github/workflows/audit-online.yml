@@ -35,22 +35,28 @@ permissions:
   issues: write
 
 env:
-  # Registration-path casks cannot be audited here: resolving their download means POSTing a real
-  # person's identity to Blackmagic, and CI has no config file to read one from — deliberately, since
-  # the alternative is holding someone's home address in Actions secrets. Their download path is
-  # covered by `test/bmd_config_test.rb` and by installing locally.
-  SKIP_CASKS: blackmagic-davinci-resolve
+  # Casks never audited here. Empty: registration-path casks (Resolve) resolve with the owner's details
+  # from the `bmd-registration` environment, see the Audit step (#107).
+  SKIP_CASKS: ""
 
 jobs:
   audit:
     # macOS: the online audit extracts the DMG with `hdiutil`.
     runs-on: macos-latest
+    # Holds the owner's `HOMEBREW_BMD_TAP_*` registration secrets. Limited to `main` in the repository
+    # settings, so only scheduled and manual runs of reviewed code can read them, never PR code. See
+    # CONTRIBUTING.md.
+    environment: bmd-registration
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
         uses: Homebrew/actions/setup-homebrew@main
         with:
           cask: true
+          # Defaults to on for an Actions debug re-run, and turns on `HOMEBREW_DEBUG` and
+          # `HOMEBREW_VERBOSE` for every later step. That output can contain the registration secrets
+          # in a form that GitHub cannot mask.
+          debug: false
 
       - name: Cache Homebrew Bundler RubyGems
         uses: actions/cache@v4
@@ -69,6 +75,18 @@ jobs:
         env:
           TAP: ${{ steps.set-up-homebrew.outputs.tap-name }}
           REQUESTED: ${{ inputs.casks }}
+          # Read by `BmdConfig` for releases that need registration. Each audit of such a cask registers
+          # the owner with Blackmagic again. Unset, those casks fail with a `BmdConfig` error that names
+          # the missing fields. Do not add `--debug` or `--verbose`: they could log the request body.
+          HOMEBREW_BMD_TAP_FIRSTNAME: ${{ secrets.HOMEBREW_BMD_TAP_FIRSTNAME }}
+          HOMEBREW_BMD_TAP_LASTNAME: ${{ secrets.HOMEBREW_BMD_TAP_LASTNAME }}
+          HOMEBREW_BMD_TAP_EMAIL: ${{ secrets.HOMEBREW_BMD_TAP_EMAIL }}
+          HOMEBREW_BMD_TAP_PHONE: ${{ secrets.HOMEBREW_BMD_TAP_PHONE }}
+          HOMEBREW_BMD_TAP_COMPANY: ${{ secrets.HOMEBREW_BMD_TAP_COMPANY }}
+          HOMEBREW_BMD_TAP_STREET: ${{ secrets.HOMEBREW_BMD_TAP_STREET }}
+          HOMEBREW_BMD_TAP_CITY: ${{ secrets.HOMEBREW_BMD_TAP_CITY }}
+          HOMEBREW_BMD_TAP_STATE: ${{ secrets.HOMEBREW_BMD_TAP_STATE }}
+          HOMEBREW_BMD_TAP_COUNTRY: ${{ secrets.HOMEBREW_BMD_TAP_COUNTRY }}
         run: |
           set -eu
           # Derived from the checked-out casks rather than listed here, so a cask added later is

@@ -15,8 +15,8 @@ require "tmpdir"
 require_relative "../lib/bmd_resolver"
 require_relative "support"
 
-# Every config read runs against an empty temporary XDG dir with every `BMD_TAP_*` cleared (then
-# `env` applied), so the developer's own config — valid or broken — cannot reach these checks.
+# Every config read runs against an empty temporary XDG dir with every `HOMEBREW_BMD_TAP_*` cleared
+# (then `env` applied), so the developer's own config — valid or broken — cannot reach these checks.
 def with_isolated_config(env = {})
   Dir.mktmpdir("bmd-resolver-test") do |dir|
     cleared = BmdConfig::FIELDS.to_h { |name| [BmdConfig.env_var(name), nil] }
@@ -37,17 +37,23 @@ CurlResult = Struct.new(:stdout, :success) do
   def status = Struct.new(:exitstatus).new(7)
 end
 
-def resolving(stdout, success: true)
+def resolving(stdout, success: true, registration: false, env: {})
   recorded = {}
   Utils::Curl.define_singleton_method(:curl_output) do |*args, **options|
     recorded[:args] = args
     recorded[:options] = options
+    data = args[args.index("--data-binary") + 1] if args.include?("--data-binary")
+    if data&.start_with?("@")
+      recorded[:body_path] = data.delete_prefix("@")
+      recorded[:body_mode] = File.stat(recorded[:body_path]).mode & 0777
+      recorded[:body] = JSON.parse(File.read(recorded[:body_path]))
+    end
     CurlResult.new(stdout, success)
   end
 
-  with_isolated_config do
+  with_isolated_config(env) do
     recorded[:config_path] = BmdConfig.path.to_s
-    url = BmdResolver.mint_signed_url("download-id", product: "Test", registration: false)
+    url = BmdResolver.mint_signed_url("download-id", product: "Test", registration:)
     recorded.merge(url:)
   rescue BmdResolver::RefusedError => e
     recorded.merge(refused: e)
@@ -91,6 +97,25 @@ end
 # The country appears in the path as well; omitting it from the body is a 400 either way.
 check("carries the country in the body as well as the path") do
   ANONYMOUS["country"] == BmdConfig::DEFAULT_COUNTRY && REGISTRATION["country"] == BmdConfig::DEFAULT_COUNTRY
+end
+
+puts "\nkeeping registration details out of logs"
+
+# Homebrew prints curl's argv shell-escaped under `HOMEBREW_DEBUG` + `HOMEBREW_VERBOSE`, which an
+# Actions debug re-run turns on, and the escaping defeats GitHub's secret masking (#107).
+REGISTERED = resolving(SIGNED, registration: true, env: REGISTRATION_ENV).freeze
+
+check("puts no registration detail on curl's command line") do
+  argv = REGISTERED[:args].join(" ")
+  REGISTRATION_ENV.values.none? { |value| argv.include?(value) }
+end
+
+check("sends the full registration body from a file only the user can read") do
+  REGISTERED[:body] == REGISTRATION && REGISTERED[:body_mode] == 0600
+end
+
+check("deletes the body file once the request is done") do
+  !File.exist?(REGISTERED[:body_path])
 end
 
 puts "\nwhen Blackmagic refuse"

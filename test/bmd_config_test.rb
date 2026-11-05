@@ -17,8 +17,8 @@ require_relative "support"
 
 DETAILS = BmdConfig::REGISTRATION_FIELDS.to_h { |name| [name, "test-#{name}"] }.freeze
 
-# Sets exactly `env` for the duration of the block and puts it back afterwards — a stray `BMD_TAP_*`
-# in the developer's own shell must not be able to decide a result.
+# Sets exactly `env` for the duration of the block and puts it back afterwards — a stray
+# `HOMEBREW_BMD_TAP_*` in the developer's own shell must not be able to decide a result.
 def with_env(env)
   previous = env.keys.to_h { |key| [key, ENV.fetch(key, nil)] }
   env.each { |key, value| ENV[key] = value }
@@ -27,8 +27,8 @@ ensure
   previous&.each { |key, value| ENV[key] = value }
 end
 
-# A config directory holding `config` (nil for no file), with every `BMD_TAP_*` variable cleared and
-# then `env` applied on top.
+# A config directory holding `config` (nil for no file), with every `HOMEBREW_BMD_TAP_*` variable
+# cleared and then `env` applied on top.
 def with_config_dir(config, env: {}, &block)
   Dir.mktmpdir("bmd-config-test") do |dir|
     path = File.join(dir, "bmd-tap")
@@ -60,7 +60,7 @@ check("comes from the config file when set there") do
 end
 
 check("prefers the environment over the file") do
-  with_config_dir(FULL_CONFIG, env: { "BMD_TAP_COUNTRY" => "gb" }) { BmdConfig.country == "gb" }
+  with_config_dir(FULL_CONFIG, env: { "HOMEBREW_BMD_TAP_COUNTRY" => "gb" }) { BmdConfig.country == "gb" }
 end
 
 check("falls back to the default when the file says nothing about it") do
@@ -79,7 +79,7 @@ check("does not include country") do
 end
 
 check("takes a single field from the environment over the file") do
-  with_config_dir(FULL_CONFIG, env: { "BMD_TAP_EMAIL" => "env@example.com" }) do
+  with_config_dir(FULL_CONFIG, env: { "HOMEBREW_BMD_TAP_EMAIL" => "env@example.com" }) do
     BmdConfig.registration_details["email"] == "env@example.com"
   end
 end
@@ -108,8 +108,13 @@ check_raises("prints the JSON skeleton", BmdConfig::ConfigError, '"firstname"') 
   with_config_dir(nil) { BmdConfig.registration_details }
 end
 
-check_raises("names an environment variable as the alternative", BmdConfig::ConfigError, "BMD_TAP_") do
+check_raises("names an environment variable as the alternative", BmdConfig::ConfigError, "HOMEBREW_BMD_TAP_") do
   with_config_dir(nil) { BmdConfig.registration_details }
+end
+
+# `brew` drops every other variable before Ruby starts, so any other prefix is silently ignored.
+check("uses an environment prefix that brew passes through") do
+  BmdConfig.env_var("email").start_with?("HOMEBREW_")
 end
 
 check_raises("names the fields that are missing", BmdConfig::ConfigError, "phone, city") do
@@ -126,17 +131,17 @@ end
 
 puts "\nblank overrides"
 
-# An empty `BMD_TAP_*` is what an unset CI secret expands to, so it counts as absent rather than as an
-# override to a blank value: the file still answers, and if neither source has the field the missing-
-# field error above is what surfaces. Never a blank field posted to Blackmagic either way.
+# An empty `HOMEBREW_BMD_TAP_*` is what an unset CI secret expands to, so it counts as absent rather
+# than as an override to a blank value: the file still answers, and if neither source has the field
+# the missing-field error above is what surfaces. Never a blank field posted to Blackmagic either way.
 check("ignores a blank environment override in favour of the file") do
-  with_config_dir(FULL_CONFIG, env: { "BMD_TAP_EMAIL" => "" }) do
+  with_config_dir(FULL_CONFIG, env: { "HOMEBREW_BMD_TAP_EMAIL" => "" }) do
     BmdConfig.registration_details["email"] == DETAILS["email"]
   end
 end
 
 check_raises("still fails when a blank override is the only source", BmdConfig::ConfigError, "email") do
-  with_config_dir(JSON.generate(DETAILS.except("email")), env: { "BMD_TAP_EMAIL" => "  " }) do
+  with_config_dir(JSON.generate(DETAILS.except("email")), env: { "HOMEBREW_BMD_TAP_EMAIL" => "  " }) do
     BmdConfig.registration_details
   end
 end

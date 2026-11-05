@@ -101,7 +101,8 @@ jobs:
         runner: [macos-latest, macos-15-intel]
     runs-on: ${{ matrix.runner }}
     env:
-      # Resolve: same reason as `audit-online.yml`, registration-path casks need a real identity.
+      # Resolve: registration-path casks need a real identity, and PR code never gets the owner's
+      # `bmd-registration` secrets (#107). `audit-online.yml` and `bump.yml` cover its download.
       # Cintel: its uninstall script deactivates a driver extension, which waits for user approval.
       # Resolve Studio: uninstall deliberately keeps the Fairlight driver and RAW Player receipts, as
       # Blackmagic's uninstaller does, so receipt equality cannot hold.
