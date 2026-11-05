@@ -25,33 +25,62 @@ cask "blackmagic-davinci-resolve" do
     strategy :json, &BmdCatalog::MAC_RELEASES
   end
 
+  conflicts_with cask: "blackmagic-davinci-resolve-studio"
   # `Install Resolve 21.1.pkg`'s own installer check: "This installer requires Mac OS 15.0 or later".
   depends_on macos: :sequoia
 
   pkg "Install Resolve #{version}.pkg"
 
-  # The pkg writes four receipts — `ManifestLite`, `ManifestPanels`, `ManifestBlackmagicRawPlayer` and
-  # `ManifestFairlightAudioAccelerator` — but only the first is Resolve's own: it owns
-  # `DaVinci Resolve.app`, `Blackmagic Proxy Generator Lite.app` and the Remote Monitor. The other
-  # three are shared components that arrive with other Blackmagic installers too, and `pkgutil`
-  # uninstalls are not reference-counted, so a `com.blackmagic-design.Manifest.*` prefix would delete
-  # the control-panel and RAW-player files out from under a co-installed product. Observed, not
-  # theorised: a machine with Fairlight Live on it carries `ManifestPanelsFairlightLive`,
-  # `ManifestFairlightLive` and `ManifestProxyGenerator` receipts, which that prefix also matches.
+  # Uninstall policy: do what Blackmagic's own uninstaller does, and keep receipts truthful — remove a
+  # receipt (and its files) when the uninstaller removes those files, keep it when it keeps them.
+  # `Uninstall Resolve.app` (on the DMG and in `/Applications/DaVinci Resolve`) is a GUI binary that
+  # wraps a shell script, so it cannot run unattended; the `launchctl:`, `delete:` and `rmdir:` lines
+  # below transcribe that script (21.1) line for line, bar the OFX renderer, which only Studio
+  # installs. Re-check it when bumping.
   #
-  # For the same reason there is no `delete:` of `/Applications/DaVinci Resolve`: that directory is
-  # shared — Fairlight Live puts `Fairlight Studio Utility.app` and its own panel setup app in it. What
-  # `pkgutil` leaves behind is the directory itself plus the installer's `Icon` and `.DS_Store`, which
-  # is the right trade against deleting another product's apps.
+  # What the pkg writes, and where each piece goes:
+  # - `ManifestLite`: Resolve itself, Proxy Generator Lite, the Advanced Panel daemon. Ours.
+  # - `ManifestPanels`, `ManifestFairlightAudioAccelerator`, `ManifestBlackmagicRawPlayer`: only stage
+  #   installer tarballs under Resolve's own `/Library/Application Support/…/DaVinci Resolve/Prereqs`.
+  #   Ours. Postinstall scripts then run the nested installers, which write their own receipts:
+  # - `DaVinciPanels`, `DaVinciKeyboards`, `FairlightPanels`: panel frameworks, setup apps and
+  #   AdminUtility plug-ins. Panels are useless without Resolve and the vendor script removes them, so
+  #   these receipts are uninstalled too — which also catches `DaVinci Control Panels/AdminUtility`,
+  #   a path the vendor script still spells `DaVinci Resolve Panels/AdminUtility`.
+  # - `FairlightDriver` (Fairlight Audio Accelerator kext) and `BlackmagicRaw_resolve`
+  #   (`/Applications/Blackmagic RAW/*.app`): the vendor script keeps both, because Fairlight Live,
+  #   Camera and RAW Player rely on them, so their receipts stay. `pkgutil` uninstalls are not
+  #   reference-counted: uninstalling `BlackmagicRaw_resolve` would gut the RAW apps that Camera
+  #   installs under its own receipt. The driver's postinstall moves `CrystalDriver.kext` into
+  #   `/Library/Extensions`, outside any receipt, so it stays either way.
   #
-  # `Blackmagic Proxy Generator Lite.app` is the one path that needs deleting outright. Fairlight Live
-  # ships the same bundle under its own receipt, so a machine with both installed has two receipts
-  # claiming it and `pkgutil` removes only the files this one lists — which took Info.plist and the
-  # binary and left 200-odd stale files behind, an app that no longer launches. A cask that installed
-  # the bundle should remove the bundle; a husk is worse than either outcome, and reinstalling either
-  # product restores it whole.
-  uninstall pkgutil: "^com\\.blackmagic-design\\.ManifestLite$",
-            delete:  "/Applications/Blackmagic Proxy Generator Lite.app"
+  # `/Applications/DaVinci Resolve` goes whole, as the vendor script does, even though Fairlight Live
+  # keeps `Fairlight Studio Utility.app` there and `FairlightDriver` keeps
+  # `Uninstall Fairlight Audio Accelerator.app` there. Reinstalling Resolve or Fairlight Live restores
+  # both, and `brew upgrade` reinstalls straight away.
+  #
+  # Two-way door: for receipt-only cleanup instead, drop `delete:` and `rmdir:` and the three panel
+  # receipts. That keeps co-installed Fairlight Live intact but leaves panels and empty folders behind.
+  uninstall launchctl: "com.blackmagic-design.DaVinciResolveBMDPanelDaemon",
+            pkgutil:   [
+              "^com\\.blackmagic-design\\.DaVinciKeyboards$",
+              "^com\\.blackmagic-design\\.DaVinciPanels$",
+              "^com\\.blackmagic-design\\.FairlightPanels$",
+              "^com\\.blackmagic-design\\.ManifestBlackmagicRawPlayer$",
+              "^com\\.blackmagic-design\\.ManifestFairlightAudioAccelerator$",
+              "^com\\.blackmagic-design\\.ManifestLite$",
+              "^com\\.blackmagic-design\\.ManifestPanels$",
+            ],
+            delete:    [
+              "/Applications/Blackmagic Proxy Generator Lite.app",
+              "/Applications/DaVinci Resolve",
+              "/Library/Application Support/Blackmagic Design/DaVinci Resolve Advanced Panel",
+              "/Library/Application Support/Blackmagic Design/DaVinci Resolve Panels/AdminUtility",
+              "/Library/Frameworks/DaVinciPanelAPI.framework",
+              "/Library/Frameworks/FairlightPanelAPI.framework",
+              "/var/tmp/davinci_socket",
+            ],
+            rmdir:     "/Library/Application Support/Blackmagic Design/DaVinci Resolve Panels"
 
   # Resolve keeps its databases, project media and logs outside the installed tree, and losing a
   # colourist's project library to `brew uninstall` would be unforgivable — so these are `zap` only,
