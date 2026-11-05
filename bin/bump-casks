@@ -1,0 +1,53 @@
+#!/bin/bash
+# Run by bump.yml: `brew bump` one cask at a time. A cask whose new release needs Blackmagic
+# registration cannot be bumped here: the runner has no identity, by design (lib/bmd_config.rb, #101).
+# Instead of failing the whole run on every schedule, each such cask and version gets one
+# `ready-for-human` issue with the command to run locally. Any other failure still fails the run.
+#
+# Needs TAP, REPO, and a `gh` that can write issues. REPORT_ONLY=true reports without PRs or issues.
+set -euo pipefail
+: "${TAP:?}" "${REPO:?}"
+
+registration='requires registration with Blackmagic Design'
+args=(--cask)
+[[ "${REPORT_ONLY:-false}" == true ]] || args+=(--open-pr --no-fork)
+
+casks=$(cd "$(brew --repo "$TAP")/Casks" && for f in *.rb; do echo "${f%.rb}"; done)
+log=$(mktemp)
+failed=""
+
+# fd 3, so `brew` or `gh` reading stdin cannot swallow the rest of the list.
+while read -r cask <&3; do
+  if brew bump "${args[@]}" "$TAP/$cask" 2>&1 | tee "$log"; then
+    continue
+  fi
+  if ! grep -q "$registration" "$log"; then
+    failed="$failed $cask"
+    continue
+  fi
+
+  esc=$(printf '\033')
+  version=$(sed "s/$esc\[[0-9;]*m//g" "$log" | sed -n 's/^Latest livecheck version: *//p' | tail -1)
+  echo "::warning::$cask $version needs registration to download; bump it locally."
+  [[ "${REPORT_ONLY:-false}" != true && -n "$version" ]] || continue
+
+  title="Manual bump: $cask $version"
+  # All states: a closed issue means a human already decided, so it is not filed again.
+  existing=$(gh issue list --repo "$REPO" --state all --limit 500 --search "\"$title\" in:title" --json title |
+               jq --arg t "$title" '[.[] | select(.title == $t)] | length')
+  [[ "$existing" == 0 ]] || continue
+  gh issue create --repo "$REPO" --label ready-for-human --title "$title" --body-file - <<EOF || failed="$failed $cask"
+\`$cask\` $version is out, but downloading it needs Blackmagic registration, and the bump runner has no identity on purpose (see \`lib/bmd_config.rb\`).
+
+Bump it on a Mac with your registration details configured:
+
+\`\`\`sh
+brew bump-cask-pr --version $version $TAP/$cask
+\`\`\`
+
+The PR this opens goes through the factory loop like any bump PR.
+EOF
+done 3<<<"$casks"
+rm -f "$log"
+
+[[ -z "$failed" ]] || { echo "Failed:$failed"; exit 1; }
