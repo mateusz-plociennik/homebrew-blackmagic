@@ -1,0 +1,30 @@
+#!/bin/bash
+# Run at the end of a scheduled workflow: keeps one `needs-triage` issue per failing workflow. A
+# failure opens it, or comments on it when it is already open; a success closes it. A red scheduled
+# run is otherwise only an email, which is how #101 went unnoticed for weeks.
+#
+# Usage: bin/report-run <success|failure|cancelled> — needs REPO, WORKFLOW, RUN_URL and `gh`.
+set -euo pipefail
+: "${REPO:?}" "${WORKFLOW:?}" "${RUN_URL:?}"
+status="${1:?status}"
+
+title="Scheduled run failing: $WORKFLOW"
+issue=$(gh issue list --repo "$REPO" --state open --limit 100 --search "\"$title\" in:title" --json number,title |
+          jq -r --arg t "$title" '[.[] | select(.title == $t)] | first | .number // empty')
+
+case "$status" in
+  success)
+    [[ -z "$issue" ]] || gh issue close "$issue" --repo "$REPO" --comment "Passing again: $RUN_URL"
+    ;;
+  failure)
+    if [[ -n "$issue" ]]; then
+      gh issue comment "$issue" --repo "$REPO" --body "Failed again: $RUN_URL"
+    else
+      gh issue create --repo "$REPO" --label needs-triage --title "$title" \
+        --body "The scheduled **$WORKFLOW** run failed: $RUN_URL
+
+This issue gets a comment on every further failure and closes itself on the next success."
+    fi
+    ;;
+  *) echo "Nothing to report for status $status" ;;
+esac

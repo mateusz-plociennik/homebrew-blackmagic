@@ -12,7 +12,6 @@ ASSIGN_STUB_GH = <<~SH
   #!/bin/bash
   echo "$*" >> "$FIXTURES/log"
   case "$1 $2" in
-    "pr list") cat "$FIXTURES/busy" ;;
     "issue list") cat "$FIXTURES/issues" ;;
     "issue view") cat "$FIXTURES/issue-$3" ;;
     "api graphql")
@@ -22,11 +21,9 @@ ASSIGN_STUB_GH = <<~SH
     "api --paginate")
       [[ -e "$FIXTURES/rest-fails" ]] && exit 1
       case "$3" in
-        */events?*) cat "$FIXTURES/assignment-events" ;;
         */dependencies/blocked_by*)
           [[ -e "$FIXTURES/dependencies-fail" ]] && exit 1
           cat "$FIXTURES/blockers" ;;
-        *issues?*) cat "$FIXTURES/assigned" ;;
         *) echo "Unexpected REST call: $*" >&2; exit 1 ;;
       esac ;;
     "issue edit") [[ -e "$FIXTURES/assign-fails" ]] && exit 1; true ;;
@@ -34,25 +31,17 @@ ASSIGN_STUB_GH = <<~SH
   esac
 SH
 
-def assign_copilot(issues: [44], busy: 0, state: "OPEN", labels: ["ready-for-agent"],
+def assign_copilot(issues: [44], state: "OPEN", labels: ["ready-for-agent"],
                    assignee: "mateusz-plociennik", references: [[]], timelines: {},
-                   assigned: [], blockers: [], blocker_pages: nil,
-                   assignment_events: nil, max_parallel: nil,
+                   blockers: [], blocker_pages: nil,
                    api_fails: false, rest_fails: false, dependencies_fail: false, assign_fails: false)
   Dir.mktmpdir do |dir|
     File.write("#{dir}/gh", ASSIGN_STUB_GH)
     File.chmod(0755, "#{dir}/gh")
     File.write("#{dir}/log", "")
-    File.write("#{dir}/busy", busy.to_s)
     File.write("#{dir}/issues", issues.join("\n"))
-    File.write("#{dir}/assigned", assigned.map do |number|
-      { number:, assignees: [{ login: "Copilot" }] }
-    end.to_json)
-    File.write("#{dir}/assignment-events", (assignment_events || [{
-      event: "assigned", created_at: "2026-01-01T00:00:00Z", assignee: { login: "Copilot" }
-    }]).to_json)
     File.write("#{dir}/blockers", (blocker_pages || [blockers]).map(&:to_json).join("\n"))
-    (issues + assigned).uniq.each do |issue|
+    issues.each do |issue|
       File.write("#{dir}/issue-#{issue}", {
         state:, labels: labels.map { |name| { name: } }, assignees: [{ login: assignee }]
       }.to_json)
@@ -68,18 +57,16 @@ def assign_copilot(issues: [44], busy: 0, state: "OPEN", labels: ["ready-for-age
       "PATH" => "#{dir}:#{ENV.fetch("PATH")}", "FIXTURES" => dir, "GH_REPO" => "o/r", "GH_TOKEN" => "test",
       "GITHUB_STEP_SUMMARY" => "#{dir}/summary"
     }
-    env["COPILOT_MAX_PARALLEL"] = max_parallel.to_s if max_parallel
     output, status = Open3.capture2e(env, "bash", ASSIGN_SCRIPT)
     calls = File.readlines("#{dir}/log", chomp: true)
     [status.success?, calls.grep(/^issue edit/).map { |call| call.split[2] }, output]
   end
 end
 
-def pr_reference(state, cross_repository: false, body: "Adds casks for #44", closes: false,
-                 created_at: "2026-02-01T00:00:00Z")
+def pr_reference(state, cross_repository: false, body: "Adds casks for #44", closes: false)
   {
     isCrossRepository: cross_repository, willCloseTarget: closes,
-    source: { __typename: "PullRequest", number: 75, state:, body:, createdAt: created_at }
+    source: { __typename: "PullRequest", number: 75, state:, body: }
   }
 end
 
@@ -95,6 +82,11 @@ end
     ok, assigned, output = assign_copilot(references: [[], [pr_reference(state)]])
     ok && assigned.empty? && output.include?("#75")
   end
+end
+
+check("every eligible issue is assigned in one run, oldest first") do
+  ok, assigned = assign_copilot(issues: [44, 57, 58, 59])
+  ok && assigned == %w[44 57 58 59]
 end
 
 check("the queue continues past covered issues without assigning them") do
@@ -139,37 +131,6 @@ end
   end
 end
 
-check("a busy Copilot blocks every queue trigger") do
-  ok, assigned = assign_copilot(busy: 1)
-  ok && assigned.empty?
-end
-
-check("free parallel slots are filled oldest first, up to the limit") do
-  ok, assigned = assign_copilot(issues: [44, 57, 58, 59], busy: 1, max_parallel: 3)
-  ok && assigned == ["44", "57"]
-end
-
-check("assignments still waiting for a PR use parallel slots") do
-  ok, assigned = assign_copilot(issues: [44, 57], assigned: [62], max_parallel: 2)
-  ok && assigned == ["44"]
-end
-
-check("a full set of parallel slots blocks assignment") do
-  ok, assigned = assign_copilot(busy: 1, assigned: [62], max_parallel: 2)
-  ok && assigned.empty?
-end
-
-check("an invalid parallel limit fails without assigning") do
-  ok, assigned = assign_copilot(max_parallel: "0")
-  !ok && assigned.empty?
-end
-
-check("the workflow sets a parallel limit") do
-  workflow = YAML.load_file(File.expand_path("../.github/workflows/copilot-issue.yml", __dir__))
-  workflow.fetch("jobs").fetch("assign").fetch("steps").last.fetch("env")
-          .fetch("COPILOT_MAX_PARALLEL").to_s.match?(/\A[1-9][0-9]*\z/)
-end
-
 check("a failed reference lookup fails closed without assigning") do
   ok, assigned = assign_copilot(api_fails: true)
   !ok && assigned.empty?
@@ -183,44 +144,6 @@ end
 check("an empty queue is a successful no-op") do
   ok, assigned = assign_copilot(issues: [])
   ok && assigned.empty?
-end
-
-check("an assigned issue reserves the slot before Copilot opens its PR") do
-  ok, assigned, output = assign_copilot(assigned: [62])
-  ok && assigned.empty? && output.include?("has not opened a PR")
-end
-
-check("an old closed PR cannot release a retried assignment's reservation") do
-  ok, assigned, output = assign_copilot(assigned: [62], timelines: {
-    62 => [[pr_reference("CLOSED", body: "Fixes #62", created_at: "2025-12-01T00:00:00Z")]],
-  })
-  ok && assigned.empty? && output.include?("has not opened a PR")
-end
-
-check("the latest Copilot assignment, not a previous assignment, defines the reservation") do
-  events = [
-    { event: "assigned", created_at: "2025-01-01T00:00:00Z", assignee: { login: "Copilot" } },
-    { event: "assigned", created_at: "2026-03-01T00:00:00Z", assignee: { login: "Copilot" } },
-    { event: "assigned", created_at: "2026-04-01T00:00:00Z", assignee: { login: "human" } },
-  ]
-  ok, assigned = assign_copilot(assigned: [62], assignment_events: events, timelines: {
-    62 => [[pr_reference("CLOSED", body: "Fixes #62")]],
-  })
-  ok && assigned.empty?
-end
-
-check("an assigned issue with no visible assignment event fails closed") do
-  ok, assigned = assign_copilot(assigned: [62], assignment_events: [])
-  !ok && assigned.empty?
-end
-
-["CLOSED", "MERGED"].each do |state|
-  check("an assigned issue with a #{state.downcase} PR does not stop the next ticket") do
-    ok, assigned = assign_copilot(assigned: [62], timelines: {
-      62 => [[pr_reference(state, body: "Fixes #62")]],
-    })
-    ok && assigned == ["44"]
-  end
 end
 
 check("an unresolved native blocker prevents assignment") do
@@ -243,12 +166,12 @@ check("a failed dependency lookup fails closed") do
   !ok && assigned.empty?
 end
 
-check("a failed native dependency or reservation lookup fails without assigning") do
+check("a failed native dependency lookup fails without assigning") do
   ok, assigned = assign_copilot(rest_fails: true)
   !ok && assigned.empty?
 end
 
-check("the workflow wakes a shared serial queue on readiness and closure without cron") do
+check("the workflow wakes a shared queue on readiness and closure without cron") do
   workflow = YAML.load_file(File.expand_path("../.github/workflows/copilot-issue.yml", __dir__))
   events = workflow.fetch("on") { workflow.fetch(true) }
   events.fetch("issues").fetch("types").include?("labeled") &&
@@ -256,7 +179,8 @@ check("the workflow wakes a shared serial queue on readiness and closure without
     events.fetch("pull_request_target").fetch("types") == ["closed"] &&
     !events.key?("schedule") &&
     workflow.fetch("concurrency").fetch("group").exclude?("issue.number") &&
-    !workflow.fetch("jobs").fetch("assign").fetch("steps").last.fetch("env").key?("LABELLED_ISSUE")
+    !workflow.fetch("jobs").fetch("assign").fetch("steps").last.fetch("env").key?("LABELLED_ISSUE") &&
+    !workflow.fetch("jobs").fetch("assign").fetch("steps").last.fetch("env").key?("COPILOT_MAX_PARALLEL")
 end
 
 report_failures!
