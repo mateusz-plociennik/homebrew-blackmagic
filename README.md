@@ -6,6 +6,14 @@ official Blackmagic download endpoints. You do not use the Blackmagic web downlo
 All casks have the prefix `blackmagic-`. Thus, the tokens do not collide with homebrew-cask, and
 you can type `blackmagic-` and press TAB to see all casks.
 
+## Disclaimer
+
+This tap is unofficial and independent of [Blackmagic Design](https://www.blackmagicdesign.com/).
+
+Developed entirely from publicly accessible web forms and standard network requests, this tap
+mimics basic browser downloads. It does not circumvent registration, software licensing, or payments. 
+All official Blackmagic Design licensing terms apply.
+
 ## Install
 
 1. Add the tap:
@@ -36,14 +44,19 @@ Some casks install a full vendor bundle:
 
 - `blackmagic-camera` also installs the Blackmagic RAW tools and plug-ins.
 - `blackmagic-cintel` also installs Desktop Video drivers, Media Express and Disk Speed Test.
+- `blackmagic-davinci-resolve` and `blackmagic-davinci-resolve-studio` also install control panel
+  support, the Fairlight Audio Accelerator driver and the Blackmagic RAW Player.
 
-These casks use the vendor uninstall scripts. The scripts can remove shared components that other
-Blackmagic products use. If this occurs, install the affected products again. The cask files
-contain notes that tell you how to change this policy.
+These casks remove the same items as the vendor uninstaller. The vendor uninstaller can remove
+shared components that other Blackmagic products use. If this occurs, install the affected products
+again. Items that the vendor uninstaller keeps, for example the Blackmagic RAW Player, stay installed
+and keep their package receipts. The cask files contain notes that tell you how to change this
+policy.
 
 ## Registration details
 
-Most Blackmagic downloads are anonymous. You can install them with no configuration.
+Most Blackmagic downloads are anonymous. You can install them with no configuration. DaVinci Resolve
+Studio is an anonymous download, but you must have a licence to activate it.
 
 Some downloads, for example the free edition of DaVinci Resolve, are available only after
 registration. For these downloads, write your registration details in
@@ -127,9 +140,3 @@ install stops.
 ## Contributing
 
 Refer to [`CONTRIBUTING.md`](CONTRIBUTING.md).
-
-## Disclaimer
-
-This tap is unofficial. It has no relation to Blackmagic Design. The tap sends the same requests
-and the same data as a browser that uses the Blackmagic download form. It does not bypass
-registration, licences or payment. The Blackmagic licence terms apply to all Blackmagic software.

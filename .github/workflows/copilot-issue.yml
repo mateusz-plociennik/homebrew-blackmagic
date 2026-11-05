@@ -1,6 +1,6 @@
 name: Assign ready issues to Copilot
 
-# Drain one eligible issue at a time when readiness or completion changes, without polling.
+# Assign every ready, unblocked issue to Copilot when readiness or completion changes, without polling.
 
 on:
   issues:

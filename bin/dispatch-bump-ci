@@ -2,7 +2,8 @@
 # Run by bump.yml after `brew bump`: dispatches ci.yml for every open bump PR whose head commit has no
 # CI run yet, and comments the reviewer's next steps. Reconciling against all open bump PRs, not just
 # the ones this run opened, is what lets a PR left behind by a cancelled run or a failed dispatch get
-# CI on the next run. A run of any event or outcome on the head commit counts, so nothing is re-run.
+# CI on the next run. A run of any event or outcome on the head commit counts, so nothing is re-run,
+# except one still waiting for approval.
 # The comment is reconciled separately, so a failed one is retried without redispatching CI.
 #
 # Needs REPO (owner/name), TAP, and a `gh` authorised for REPO.
@@ -19,7 +20,10 @@ failed=""
 # fd 3, so a `gh` in the loop that reads stdin cannot swallow the rest of the list.
 while read -r pr branch sha <&3; do
   [[ "$branch" == bump-* ]] || continue
-  runs=$(gh run list --repo "$REPO" --workflow ci.yml --commit "$sha" --limit 1 --json databaseId --jq length)
+  # Except `action_required`: GitHub now opens an approval-gated `pull_request` run for every PR
+  # `GITHUB_TOKEN` creates, and that run never executes unless someone clicks "Approve".
+  runs=$(gh run list --repo "$REPO" --workflow ci.yml --commit "$sha" --limit 20 --json conclusion \
+           --jq '[.[] | select(.conclusion != "action_required")] | length')
   if [[ "$runs" != 0 ]]; then
     echo "#$pr: CI already has a run for $sha"
   elif gh workflow run ci.yml --repo "$REPO" --ref "$branch" -f pr="$pr"; then
