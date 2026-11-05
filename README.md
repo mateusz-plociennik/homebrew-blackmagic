@@ -6,6 +6,14 @@ official Blackmagic download endpoints. You do not use the Blackmagic web downlo
 All casks have the prefix `blackmagic-`. Thus, the tokens do not collide with homebrew-cask, and
 you can type `blackmagic-` and press TAB to see all casks.
 
+## Disclaimer
+
+This tap is unofficial and independent of [Blackmagic Design](https://www.blackmagicdesign.com/).
+
+Developed entirely from publicly accessible web forms and standard network requests, this tap
+mimics basic browser downloads. It does not circumvent registration, software licensing, or payments. 
+All official Blackmagic Design licensing terms apply.
+
 ## Install
 
 1. Add the tap:
@@ -47,6 +55,16 @@ uninstallers can remove shared components that other Blackmagic products use. If
 the affected products again. Items that the vendor uninstaller keeps, for example the Blackmagic RAW
 Player, stay installed and keep their package receipts. The cask files contain notes that tell you
 how to change this policy.
+- `blackmagic-hyperdeck` installs HyperDeck Utility and manuals. If Avid Media Composer is installed
+  in its default location, the installer also copies three HyperDeck machine templates there. The
+  cask removes those files and only HyperDeck's own receipts and support paths; it does not remove
+  another Blackmagic product's files.
+
+Casks that follow a vendor uninstaller remove the same items as that uninstaller. Vendor cleanup can
+remove shared components that other Blackmagic products use. If this occurs, install the affected
+products again. Items that the vendor uninstaller keeps, for example the Blackmagic RAW Player, stay
+installed and keep their package receipts. The cask files contain notes that tell you how to change
+this policy.
 
 ## Registration details
 
@@ -55,6 +73,9 @@ Studio is an anonymous download, but you must have a licence to activate it.
 Blackmagic's catalog currently lists SmartView 5.0.4 as an anonymous download with no separate
 download-terms gate. Its installer includes a separate Blackmagic Design License Agreement; review
 its terms and satisfy any applicable licensing, fee, or activation requirements.
+
+The HyperDeck installer is currently an anonymous download with no catalog terms gate. This describes
+the download only; it does not waive any separate Blackmagic licence or activation requirements.
 
 Some downloads, for example the free edition of DaVinci Resolve, are available only after
 registration. For these downloads, write your registration details in
@@ -101,7 +122,11 @@ these steps:
 
 The tap reads this key only from the config file. No environment variable sets it. The tap tells
 Blackmagic that you accept the licence, so you must accept it deliberately. At this time, no cask
-in this tap uses a licence agreement.
+in this tap uses a download-time licence agreement.
+
+Some installers present their own licence agreements, which you must review and accept yourself.
+For example, Control for Arduino's anonymous download does not grant a software licence or bypass any
+applicable licensing or activation requirements.
 
 ## Updates
 
@@ -138,9 +163,3 @@ install stops.
 ## Contributing
 
 Refer to [`CONTRIBUTING.md`](CONTRIBUTING.md).
-
-## Disclaimer
-
-This tap is unofficial. It has no relation to Blackmagic Design. The tap sends the same requests
-and the same data as a browser that uses the Blackmagic download form. It does not bypass
-registration, licences or payment. The Blackmagic licence terms apply to all Blackmagic software.
