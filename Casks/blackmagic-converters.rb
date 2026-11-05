@@ -2,8 +2,8 @@ cask "blackmagic-converters" do
   require Tap.fetch("mateusz-plociennik/blackmagic").path/"lib/bmd_catalog"
   require Tap.fetch("mateusz-plociennik/blackmagic").path/"lib/bmd_download_strategy"
 
-  version "12.4"
-  sha256 "2740075107f083f05442103c44e4bd20a751baa1e4f87632aed88ba152df2481"
+  version "12.4.1"
+  sha256 "5811c097c32445afd257ac3cfacbd16b74e6e24ea906d52f5ef9ed146dffc828"
 
   url "https://sw.blackmagicdesign.com/Converters/v#{version}/Blackmagic_Converters_Macintosh_#{version}.zip",
       using: BmdDownloadStrategy,
