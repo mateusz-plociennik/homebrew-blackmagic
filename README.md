@@ -6,6 +6,14 @@ official Blackmagic download endpoints. You do not use the Blackmagic web downlo
 All casks have the prefix `blackmagic-`. Thus, the tokens do not collide with homebrew-cask, and
 you can type `blackmagic-` and press TAB to see all casks.
 
+## Disclaimer
+
+This tap is unofficial and independent of [Blackmagic Design](https://www.blackmagicdesign.com/).
+
+Developed entirely from publicly accessible web forms and standard network requests, this tap
+mimics basic browser downloads. It does not circumvent registration, software licensing, or payments. 
+All official Blackmagic Design licensing terms apply.
+
 ## Install
 
 1. Add the tap:
@@ -38,17 +46,57 @@ Some casks install a full vendor bundle:
 - `blackmagic-cintel` also installs Desktop Video drivers, Media Express and Disk Speed Test.
 - `blackmagic-davinci-resolve` and `blackmagic-davinci-resolve-studio` also install control panel
   support, the Fairlight Audio Accelerator driver and the Blackmagic RAW Player.
+- `blackmagic-ultrascope` runs the vendor uninstaller to remove its app, drivers and support files,
+  and forgets only its `UltraScope`, `UltraScopeAssets` and `UltraScopeUninstaller` receipts. It
+  removes the system login hook only when it still points to UltraScope's own script.
+- Ultimatte 12 1.0 and the separate Ultimatte 2.4.1 release share three package receipts and
+  `/Applications/Blackmagic Ultimatte`; they cannot coexist. Uninstalling either removes the shared
+  directory, so reinstall the release you still need. Ultimatte 12's setup app is Intel-only and
+  needs Rosetta 2 on Apple Silicon.
+- `blackmagic-teranex` also installs the Teranex Mini component. It removes the bundled Teranex
+  receipts by exact ID rather than deleting receipts by a shared prefix. It requires macOS 11 Big Sur
+  or later; the installer supports both Apple silicon and Intel Macs.
+- `blackmagic-smartview` removes only its application and application-support directories and its
+  three exact package receipts. It does not run the vendor uninstaller, which forgets a broad,
+  case-insensitive SmartView receipt prefix.
 
-These casks remove the same items as the vendor uninstaller. The vendor uninstaller can remove
-shared components that other Blackmagic products use. If this occurs, install the affected products
-again. Items that the vendor uninstaller keeps, for example the Blackmagic RAW Player, stay installed
-and keep their package receipts. The cask files contain notes that tell you how to change this
-policy.
+Where a cask invokes a vendor uninstaller, it removes the same items as that script. Vendor
+uninstallers can remove shared components that other Blackmagic products use. If this occurs, install
+the affected products again. Items that the vendor uninstaller keeps, for example the Blackmagic RAW
+Player, stay installed and keep their package receipts. The cask files contain notes that tell you
+how to change this policy.
+- `blackmagic-hyperdeck` installs HyperDeck Utility and manuals. If Avid Media Composer is installed
+  in its default location, the installer also copies three HyperDeck machine templates there. The
+  cask removes those files and only HyperDeck's own receipts and support paths; it does not remove
+  another Blackmagic product's files.
+
+Casks that follow a vendor uninstaller remove the same items as that uninstaller. Vendor cleanup can
+remove shared components that other Blackmagic products use. If this occurs, install the affected
+products again. Items that the vendor uninstaller keeps, for example the Blackmagic RAW Player, stay
+installed and keep their package receipts. The cask files contain notes that tell you how to change
+this policy.
 
 ## Registration details
 
 Most Blackmagic downloads are anonymous. You can install them with no configuration. DaVinci Resolve
 Studio is an anonymous download, but you must have a licence to activate it.
+Blackmagic's catalog currently lists SmartView 5.0.4 as an anonymous download with no separate
+download-terms gate. Its installer includes a separate Blackmagic Design License Agreement; review
+its terms and satisfy any applicable licensing, fee, or activation requirements.
+
+The HyperDeck installer is currently an anonymous download with no catalog terms gate. This describes
+the download only; it does not waive any separate Blackmagic licence or activation requirements.
+
+Teranex currently has no registration or download-terms gate in the catalog. Anonymous access does not
+grant a software or hardware licence or bypass any activation requirement.
+
+Ultimatte 12 1.0 has no catalog registration or download-terms gate. Its installer includes a licence
+that you must review and accept if prompted; the release notes describe USB hardware setup and
+firmware updates, with no separate software activation step.
+
+UltraScope also downloads anonymously and has no catalog registration or terms gate, but it requires
+compatible Blackmagic UltraScope hardware. Anonymous download access does not grant a software licence
+or bypass any applicable activation requirement.
 
 Some downloads, for example the free edition of DaVinci Resolve, are available only after
 registration. For these downloads, write your registration details in
@@ -95,7 +143,11 @@ these steps:
 
 The tap reads this key only from the config file. No environment variable sets it. The tap tells
 Blackmagic that you accept the licence, so you must accept it deliberately. At this time, no cask
-in this tap uses a licence agreement.
+in this tap uses a download-time licence agreement.
+
+Some installers present their own licence agreements, which you must review and accept yourself.
+For example, Control for Arduino's anonymous download does not grant a software licence or bypass any
+applicable licensing or activation requirements.
 
 ## Updates
 
@@ -132,9 +184,3 @@ install stops.
 ## Contributing
 
 Refer to [`CONTRIBUTING.md`](CONTRIBUTING.md).
-
-## Disclaimer
-
-This tap is unofficial. It has no relation to Blackmagic Design. The tap sends the same requests
-and the same data as a browser that uses the Blackmagic download form. It does not bypass
-registration, licences or payment. The Blackmagic licence terms apply to all Blackmagic software.
