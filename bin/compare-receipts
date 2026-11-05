@@ -2,7 +2,8 @@
 # Compares two `pkgutil --pkgs` snapshots. Exit 0: identical; 1: receipts appeared or disappeared;
 # 2: a snapshot is unreadable, which must never pass as an empty list.
 # Optional RETAINED: receipts the cask's uninstall deliberately keeps (one per line, `#` comments).
-# They must be left behind, and nothing else may be, so the policy cannot drift in either direction.
+# They may be left behind; any other leftover still fails. "May", not "must": a runner VM skips some
+# nested installers (Resolve's Fairlight kext), so a kept receipt is not always there to keep.
 set -euo pipefail
 
 [ $# -eq 2 ] || [ $# -eq 3 ] || { echo "usage: $0 BEFORE AFTER [RETAINED]" >&2; exit 2; }
@@ -22,10 +23,8 @@ fi
 
 left=$(comm -13 "$tmp/before" "$tmp/after")
 new=$(comm -23 <(echo "$left" | sed '/^$/d') "$tmp/retained" | tr '\n' ' ')
-lost=$(comm -13 "$tmp/after" "$tmp/retained" | tr '\n' ' ')
 missing=$(comm -23 "$tmp/before" "$tmp/after" | tr '\n' ' ')
 
 [ -z "$new" ] || echo "left receipts behind: $new"
-[ -z "$lost" ] || echo "did not keep retained receipts: $lost"
 [ -z "$missing" ] || echo "removed pre-existing receipts: $missing"
-[ -z "$new$lost$missing" ]
+[ -z "$new$missing" ]

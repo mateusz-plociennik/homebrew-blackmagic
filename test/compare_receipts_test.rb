@@ -46,9 +46,8 @@ check("a retained receipt left behind passes; comments and blank lines are ignor
   compare(%w[com.a], %w[com.a com.kept], ["# shared with Camera", "", "com.kept  # driver"]) == ["", 0]
 end
 
-check("a retained receipt the uninstall removed fails and is named") do
-  out, code = compare(%w[com.a], %w[com.a], %w[com.kept])
-  code == 1 && out.include?("did not keep retained receipts: com.kept")
+check("a retained receipt that was never installed passes") do
+  compare(%w[com.a], %w[com.a], %w[com.kept]) == ["", 0]
 end
 
 check("retaining one receipt still fails on another leftover") do

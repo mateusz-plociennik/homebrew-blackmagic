@@ -1,4 +1,6 @@
-# Receipts `blackmagic-davinci-resolve-studio`'s uninstall keeps on purpose, as Blackmagic's uninstaller
-# does; the cask explains why. CI requires exactly these to remain after uninstall.
+# Receipts `blackmagic-davinci-resolve-studio`'s uninstall keeps on purpose; the cask explains why.
+# CI lets these remain after uninstall and fails on any other leftover.
 com.blackmagic-design.FairlightDriver
 com.blackmagic-design.BlackmagicRaw_resolve
+# Apple's ASAF SDK, installed by Resolve 21.1.2's pkg; Apple's, so other apps may use it.
+com.Apple.pkg.ASAF.SDK
