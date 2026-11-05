@@ -18,8 +18,9 @@ cask "blackmagic-ultimatte" do
     strategy :json, &BmdCatalog::MAC_RELEASES
   end
 
-  # The installer supports arm64 and x86_64; its 10.9 minimum is below Homebrew's supported macOS floor.
+  # Ultimatte 12 shares this release's receipts and /Applications/Blackmagic Ultimatte.
   conflicts_with cask: "blackmagic-ultimatte-12"
+  # The installer supports arm64 and x86_64; its 10.9 minimum is below Homebrew's supported macOS floor.
   depends_on :macos
 
   pkg "Install Ultimatte #{version}.pkg"
