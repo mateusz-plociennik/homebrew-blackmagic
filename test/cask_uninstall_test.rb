@@ -66,6 +66,47 @@ check("Cintel removes both orphaned helper jobs, plists and the privileged helpe
   ]
 end
 
+hyperdeck = Cask::CaskLoader.load(File.read(File.expand_path("../Casks/blackmagic-hyperdeck.rb", __dir__)))
+hyperdeck_uninstall = hyperdeck.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
+
+check("HyperDeck forgets only its three exact package receipts") do
+  hyperdeck_uninstall.fetch(:pkgutil) == [
+    "^com\\.blackmagic-design\\.HyperDeck$",
+    "^com\\.blackmagic-design\\.HyperDeckAssets$",
+    "^com\\.blackmagic-design\\.HyperDeckUninstaller$",
+  ]
+end
+
+check("HyperDeck removes only its app, support files, and copied Avid templates") do
+  hyperdeck_uninstall.fetch(:delete) == [
+    "/Applications/Avid Media Composer/SupportingFiles/Machine_Templates/" \
+    "Blackmagic Design HyperDeck 24P.txt",
+    "/Applications/Avid Media Composer/SupportingFiles/Machine_Templates/" \
+    "Blackmagic Design HyperDeck NTSC.txt",
+    "/Applications/Avid Media Composer/SupportingFiles/Machine_Templates/" \
+    "Blackmagic Design HyperDeck PAL.txt",
+    "/Applications/Blackmagic HyperDeck",
+    "/Library/Application Support/Blackmagic Design/HyperDeck",
+  ]
+end
+
+control_for_arduino = Cask::CaskLoader.load(
+  File.read(File.expand_path("../Casks/blackmagic-control-for-arduino.rb", __dir__)),
+)
+control_for_arduino_uninstall = control_for_arduino.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
+
+check("Control for Arduino runs its uninstaller and removes only its exact package receipts") do
+  script = control_for_arduino_uninstall.fetch(:script)
+  script.fetch(:executable) ==
+    "Uninstall Blackmagic Shield for Arduino.app/Contents/Resources/uninstall.sh" &&
+    script.fetch(:sudo) &&
+    control_for_arduino_uninstall.fetch(:pkgutil) == [
+      "^com\\.blackmagic-design\\.CameraControl$",
+      "^com\\.blackmagic-design\\.CameraControlAssets$",
+      "^com\\.blackmagic-design\\.CameraControlUninstaller$",
+    ]
+end
+
 casks = Dir[File.expand_path("../Casks/*.rb", __dir__)].map do |path|
   [File.basename(path), Cask::CaskLoader.load(File.read(path))]
 end
@@ -93,6 +134,53 @@ check("pkgutil receipt cleanup avoids wildcard or grouped regex stanzas") do
   end
 
   broad_patterns.empty? || raise(broad_patterns.join(", "))
+end
+
+teranex = casks.find { |file, _cask| file == "blackmagic-teranex.rb" }&.last
+
+check("Teranex removes the full bundled payload and all four exact receipts") do
+  next false unless teranex
+
+  directives = teranex.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
+  delete_targets = directives.fetch(:delete)
+  mini_payload_paths = [
+    "/Library/Application Support/Blackmagic Design/Teranex/AdminUtility/PlugIns/TeranexMini/libTeranexMiniSetup.dylib",
+    "/Library/Application Support/Blackmagic Design/Teranex/AdminUtility/PlugIns/IPVideo/libIPVideoSetup.dylib",
+    "/Library/Application Support/Blackmagic Design/Teranex/AdminUtility/PlugIns/TeranexMini8k/libTeranexMini8kSetup.dylib",
+  ]
+  directives.fetch(:quit) == "com.blackmagic-design.teranex.utility" &&
+    delete_targets == [
+      "/Applications/Blackmagic Teranex",
+      "/Library/Application Support/Blackmagic Design/Teranex",
+    ] &&
+    mini_payload_paths.all? do |payload|
+      delete_targets.any? { |target| payload == target || payload.start_with?("#{target}/") }
+    end &&
+    directives.fetch(:pkgutil) == [
+      "^com\\.blackmagic-design\\.Teranex$",
+      "^com\\.blackmagic-design\\.TeranexAssets$",
+      "^com\\.blackmagic-design\\.TeranexMini$",
+      "^com\\.blackmagic-design\\.TeranexUninstaller$",
+    ]
+end
+
+check("Teranex requires the minimum macOS version stated in its release notes") do
+  requirement = teranex&.depends_on&.macos
+  requirement && requirement.minimum_version.to_s == "11"
+end
+
+smartview = Cask::CaskLoader.load(File.read(File.expand_path("../Casks/blackmagic-smartview.rb", __dir__)))
+smartview_uninstall = smartview.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
+
+check("SmartView removes only its exact receipts and product-owned directories") do
+  smartview_uninstall.fetch(:pkgutil) == [
+    "^com\\.blackmagic-design\\.SmartView$",
+    "^com\\.blackmagic-design\\.SmartViewAssets$",
+    "^com\\.blackmagic-design\\.SmartViewUninstaller$",
+  ] && smartview_uninstall.fetch(:delete) == [
+    "/Applications/Blackmagic SmartView",
+    "/Library/Application Support/Blackmagic Design/Blackmagic SmartView",
+  ] && !smartview_uninstall.key?(:script)
 end
 
 report_failures!
