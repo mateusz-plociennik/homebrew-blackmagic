@@ -46,6 +46,9 @@ Some casks install a full vendor bundle:
 - `blackmagic-cintel` also installs Desktop Video drivers, Media Express and Disk Speed Test.
 - `blackmagic-davinci-resolve` and `blackmagic-davinci-resolve-studio` also install control panel
   support, the Fairlight Audio Accelerator driver and the Blackmagic RAW Player.
+- `blackmagic-teranex` also installs the Teranex Mini component. It removes the bundled Teranex
+  receipts by exact ID rather than deleting receipts by a shared prefix. It requires macOS 11 Big Sur
+  or later; the installer supports both Apple silicon and Intel Macs.
 - `blackmagic-smartview` removes only its application and application-support directories and its
   three exact package receipts. It does not run the vendor uninstaller, which forgets a broad,
   case-insensitive SmartView receipt prefix.
@@ -76,6 +79,9 @@ its terms and satisfy any applicable licensing, fee, or activation requirements.
 
 The HyperDeck installer is currently an anonymous download with no catalog terms gate. This describes
 the download only; it does not waive any separate Blackmagic licence or activation requirements.
+
+Teranex currently has no registration or download-terms gate in the catalog. Anonymous access does not
+grant a software or hardware licence or bypass any activation requirement.
 
 Some downloads, for example the free edition of DaVinci Resolve, are available only after
 registration. For these downloads, write your registration details in
