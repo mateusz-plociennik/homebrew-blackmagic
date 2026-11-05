@@ -83,7 +83,9 @@ uninstaller, change the stanza:
   when the vendor uninstaller keeps its files.
 - Write a note in the cask. The note tells how to change to receipt-only cleanup.
 
-If the uninstall keeps receipts on purpose, add the cask to `SKIP_CASKS` in `ci.yml`.
+If the uninstall keeps receipts on purpose, list them, one per line, in
+`test/retained-receipts/<cask>`. CI then requires exactly those receipts to remain after uninstall.
+Add a cask to `SKIP_CASKS` in `ci.yml` only when it cannot install or uninstall unattended.
 
 To list the Blackmagic products that have no cask and no skip reason, run:
 

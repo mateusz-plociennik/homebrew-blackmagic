@@ -103,9 +103,9 @@ jobs:
     env:
       # Resolve: same reason as `audit-online.yml`, registration-path casks need a real identity.
       # Cintel: its uninstall script deactivates a driver extension, which waits for user approval.
-      # Resolve Studio: uninstall deliberately keeps the Fairlight driver and RAW Player receipts, as
-      # Blackmagic's uninstaller does, so receipt equality cannot hold.
-      SKIP_CASKS: blackmagic-davinci-resolve blackmagic-davinci-resolve-studio blackmagic-cintel
+      # A cask whose uninstall deliberately keeps receipts lists them in `test/retained-receipts/<cask>`
+      # rather than being skipped here.
+      SKIP_CASKS: blackmagic-davinci-resolve blackmagic-cintel
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
@@ -140,7 +140,8 @@ jobs:
         run: |
           set -euo pipefail
           [ -n "$CASKS" ] || { echo "No casks changed"; exit 0; }
-          compare="$(brew --repo "$TAP")/bin/compare-receipts"
+          tap_dir=$(brew --repo "$TAP")
+          compare="$tap_dir/bin/compare-receipts"
           snapshots=$(mktemp -d)
 
           failed=""
@@ -160,7 +161,10 @@ jobs:
             pkgutil --pkgs > "$snapshots/before"
             if brew install --cask "$TAP/$cask" && brew uninstall --cask "$TAP/$cask"; then
               pkgutil --pkgs > "$snapshots/after"
-              if ! diff=$("$compare" "$snapshots/before" "$snapshots/after"); then
+              retained=()
+              [ ! -f "$tap_dir/test/retained-receipts/$cask" ] || retained=("$tap_dir/test/retained-receipts/$cask")
+              # `+` form: macOS bash 3.2 treats an empty array as unset under `set -u`.
+              if ! diff=$("$compare" "$snapshots/before" "$snapshots/after" ${retained[@]+"${retained[@]}"}); then
                 echo "::error::$cask ${diff//$'\n'/; }"
                 failed="$failed $cask"
               fi
