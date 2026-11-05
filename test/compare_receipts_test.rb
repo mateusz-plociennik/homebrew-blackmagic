@@ -7,9 +7,11 @@ require_relative "support"
 
 SCRIPT = File.expand_path("../bin/compare-receipts", __dir__).freeze
 
-def compare(before, after)
+def compare(before, after, retained = :none)
   Dir.mktmpdir do |dir|
-    paths = { before:, after: }.map do |name, receipts|
+    files = { before:, after: }
+    files[:retained] = retained if retained != :none
+    paths = files.map do |name, receipts|
       path = File.join(dir, name.to_s)
       File.write(path, receipts.join("\n")) if receipts
       path
@@ -37,6 +39,24 @@ end
 
 check("an unreadable snapshot is an error, not an empty list") do
   out, code = compare(nil, [])
+  code == 2 && out.include?("cannot read receipt snapshot")
+end
+
+check("a retained receipt left behind passes; comments and blank lines are ignored") do
+  compare(%w[com.a], %w[com.a com.kept], ["# shared with Camera", "", "com.kept  # driver"]) == ["", 0]
+end
+
+check("a retained receipt that was never installed passes") do
+  compare(%w[com.a], %w[com.a], %w[com.kept]) == ["", 0]
+end
+
+check("retaining one receipt still fails on another leftover") do
+  out, code = compare([], %w[com.kept com.new], %w[com.kept])
+  code == 1 && out.include?("left receipts behind: com.new") && out.exclude?("com.kept")
+end
+
+check("an unreadable retained list is an error") do
+  out, code = compare([], [], nil)
   code == 2 && out.include?("cannot read receipt snapshot")
 end
 

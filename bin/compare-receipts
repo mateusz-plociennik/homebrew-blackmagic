@@ -1,9 +1,12 @@
 #!/bin/bash
 # Compares two `pkgutil --pkgs` snapshots. Exit 0: identical; 1: receipts appeared or disappeared;
 # 2: a snapshot is unreadable, which must never pass as an empty list.
+# Optional RETAINED: receipts the cask's uninstall deliberately keeps (one per line, `#` comments).
+# They may be left behind; any other leftover still fails. "May", not "must": a runner VM skips some
+# nested installers (Resolve's Fairlight kext), so a kept receipt is not always there to keep.
 set -euo pipefail
 
-[ $# -eq 2 ] || { echo "usage: $0 BEFORE AFTER" >&2; exit 2; }
+[ $# -eq 2 ] || [ $# -eq 3 ] || { echo "usage: $0 BEFORE AFTER [RETAINED]" >&2; exit 2; }
 for snapshot in "$@"; do
   [ -f "$snapshot" ] && [ -r "$snapshot" ] || { echo "cannot read receipt snapshot: $snapshot" >&2; exit 2; }
 done
@@ -12,8 +15,14 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 sed '/^$/d' "$1" | sort -u > "$tmp/before"
 sed '/^$/d' "$2" | sort -u > "$tmp/after"
+if [ $# -eq 3 ]; then
+  sed -e 's/#.*//' -e 's/[[:space:]]//g' -e '/^$/d' "$3" | sort -u > "$tmp/retained"
+else
+  : > "$tmp/retained"
+fi
 
-new=$(comm -13 "$tmp/before" "$tmp/after" | tr '\n' ' ')
+left=$(comm -13 "$tmp/before" "$tmp/after")
+new=$(comm -23 <(echo "$left" | sed '/^$/d') "$tmp/retained" | tr '\n' ' ')
 missing=$(comm -23 "$tmp/before" "$tmp/after" | tr '\n' ' ')
 
 [ -z "$new" ] || echo "left receipts behind: $new"
