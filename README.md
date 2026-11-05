@@ -146,8 +146,9 @@ Blackmagic that you accept the licence, so you must accept it deliberately. At t
 in this tap uses a download-time licence agreement.
 
 Some installers present their own licence agreements, which you must review and accept yourself.
-For example, Control for Arduino's anonymous download does not grant a software licence or bypass any
-applicable licensing or activation requirements.
+For example, Ultimatte's cask documents its bundled agreement in a caveat, and Control for
+Arduino's anonymous download does not grant a software licence or bypass any applicable licensing
+or activation requirements.
 
 ## Updates
 

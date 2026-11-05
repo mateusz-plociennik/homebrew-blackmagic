@@ -31,6 +31,26 @@ check("Camera forgets only the two bundled RAW receipts, guarded by their existe
   end
 end
 
+ultimatte = Cask::CaskLoader.load(File.read(File.expand_path("../Casks/blackmagic-ultimatte.rb", __dir__)))
+ultimatte_uninstall = ultimatte.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
+
+check("Ultimatte removes the SmartRemote plug-in and forgets only its four exact receipts") do
+  ultimatte_uninstall.fetch(:script) == {
+    executable: "Uninstall Ultimatte.app/Contents/Resources/uninstall.sh",
+    sudo:       true,
+  } && ultimatte_uninstall.fetch(:pkgutil) == [
+    "^com\\.blackmagic-design\\.SmartRemote$",
+    "^com\\.blackmagic-design\\.Ultimatte$",
+    "^com\\.blackmagic-design\\.UltimatteAssets$",
+    "^com\\.blackmagic-design\\.UltimatteUninstaller$",
+  ] && ultimatte_uninstall.fetch(:delete) ==
+    "/Library/Application Support/Blackmagic Design/Ultimatte/AdminUtility/PlugIns/SmartRemote"
+end
+
+check("Ultimatte conflicts with Ultimatte 12, which shares its receipts and app directory") do
+  ultimatte.conflicts_with.fetch(:cask).include?("blackmagic-ultimatte-12")
+end
+
 ultimatte_12 = Cask::CaskLoader.load(File.read(File.expand_path("../Casks/blackmagic-ultimatte-12.rb", __dir__)))
 ultimatte_12_uninstall = ultimatte_12.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
 
