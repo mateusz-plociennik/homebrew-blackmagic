@@ -19,6 +19,7 @@ cask "blackmagic-ultimatte" do
   end
 
   # The installer supports arm64 and x86_64; its 10.9 minimum is below Homebrew's supported macOS floor.
+  conflicts_with cask: "blackmagic-ultimatte-12"
   depends_on :macos
 
   pkg "Install Ultimatte #{version}.pkg"
