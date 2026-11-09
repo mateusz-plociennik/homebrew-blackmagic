@@ -2,8 +2,8 @@ cask "blackmagic-davinci-resolve-studio" do
   require Tap.fetch("mateusz-plociennik/blackmagic").path/"lib/bmd_catalog"
   require Tap.fetch("mateusz-plociennik/blackmagic").path/"lib/bmd_download_strategy"
 
-  version "21.1.2"
-  sha256 "8e0e641fce2427ac122bfefd9ee2cf40308c9cb0d1e7dd7ca8981546ee341e78"
+  version "21.2"
+  sha256 "45dc7761c24d1589f17372496906939eabb464913368d16370490e2f4ebc4c9b"
 
   url "https://sw.blackmagicdesign.com/DaVinciResolve/v#{version}/DaVinci_Resolve_Studio_#{version}_Mac.zip",
       using: BmdDownloadStrategy,
