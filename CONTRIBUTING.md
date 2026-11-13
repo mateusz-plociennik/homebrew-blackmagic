@@ -123,7 +123,8 @@ branch. The next bump run opens it again from `main`.
 `bin/factory-pr` takes each open pull request from Copilot, from `bump.yml`, or with the `agent:review`
 label, and moves it one step on each scan until a human can merge it:
 
-1. It waits while Copilot is working, CI is running, or a review is running.
+1. It waits while Copilot coding is active, CI is running, or the factory review is running.
+   Native Copilot review activity is separate from coding and does not hold this loop.
 2. When the head commit has no CI run, it starts `ci.yml`. The `pull_request` run of a Copilot or bot
    pull request waits for approval; a started run does not. A pull request that changes `.github/` gets
    `agent:blocked` instead, because a started run would execute the branch's workflow files with this
@@ -133,10 +134,15 @@ label, and moves it one step on each scan until a human can merge it:
 4. When CI passes, `factory-review.yml` reviews the commit. The reviewer can only read files: it has
    no shell, no network and no write token. It never approves.
 5. When the review passes, the loop marks the pull request ready, adds `ready-for-human`, and mentions
-   the owner. When only human checks remain, it adds `ready-for-human` and leaves the pull request in
-   draft. You merge.
+   the owner. When only human checks remain, it adds `ready-for-human` and ensures the pull request is
+   draft before recording the handoff. Existing human handoffs at the same commit are also returned
+   to draft if necessary. You merge.
 6. After 3 rework rounds, or 6 hours without a Copilot push, it adds `agent:blocked` with the reason.
    Remove the label to resume with 3 new rounds.
+   An unmatched activity start without a confirmed active run uses the same 6-hour deadline
+   (or the earlier outstanding rework deadline), then blocks rather than dispatching overlapping work.
+   Inspect and resolve any coding session before removing `agent:blocked`; this acknowledges old
+   starts, while confirmed active runs and newer starts still hold the loop. API failures take no action.
 
 The loop never approves or merges. To see the next step for each pull request without acting, run
 `GH_REPO=mateusz-plociennik/homebrew-blackmagic bin/factory-pr --dry-run`.
