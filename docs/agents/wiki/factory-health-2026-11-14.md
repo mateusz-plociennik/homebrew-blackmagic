@@ -72,3 +72,27 @@ Evidence context, recorded 2026-11-14: local discovery report
 `docs/agents/factory-state-handoff.md` snapshot (local/untracked, not a published
 wiki source). Public run links and immutable code pointers above supply the
 reproducible repository evidence; the local reports were not copied wholesale.
+
+## 2026-11-14: independent-review addendum — shared head branches
+
+Independent review found an incomplete activity guard in
+`mateusz-plociennik/homebrew-blackmagic@b4cef047f94758a528dfd023825d42550eba5c74`:
+PRs targeting different bases could share one same-repository head branch.
+Filtering active runs by PR association let one PR request overlapping rework
+while coding for the other PR was still mutating their shared branch.
+
+This supersedes the earlier activity-safety claim for that case, without
+changing the historical test results above. Correction:
+`mateusz-plociennik/homebrew-blackmagic@d696c76379273756b2df8339022ba2a487bc30db`
+([code and regression](https://github.com/mateusz-plociennik/homebrew-blackmagic/commit/d696c76379273756b2df8339022ba2a487bc30db)).
+The PR-association filter was removed; repository/encoded-branch API scope and
+native-review exclusion were retained. Active non-native runs guarded branch
+mutation regardless of their associated PR.
+
+A full-scan regression failed before the correction, then passed: both
+shared-branch PRs waited while an unrelated branch still requested its own
+rework. A second regression retained active-native-review exclusion. Focused
+factory tests passed 54 assertions; the enabled `bin/verify` commit hook passed
+274 assertions plus the existing offline tap and shell checks. One initial
+regexp-style failure was corrected before the passing gate. No live GitHub
+mutation, push or PR accompanied this follow-up.
