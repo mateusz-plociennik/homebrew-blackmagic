@@ -125,11 +125,11 @@ pr_state() {
               <<<"$events") || return 1
   # Native review has its own App and dynamic workflow. Neither proves coding activity. Keep
   # unmatched starts conservative; only a live run holds them beyond the existing rework deadline.
+  # A coding run can mutate every PR sharing this repository/branch, regardless of its target base.
   branch=$(jq -r '.headRefName | @uri' <<<"$view") || return 1
   copilot_runs=$(gh api "repos/$GH_REPO/actions/runs?event=dynamic&branch=$branch&per_page=100" --paginate \
-                    --jq ".workflow_runs[] | select(.path != \"dynamic/agents/copilot-pull-request-reviewer\")
-                           | select(.status != \"completed\")
-                           | select((.pull_requests | length) == 0 or any(.pull_requests[]; .number == $pr))") ||
+                    --jq '.workflow_runs[] | select(.path != "dynamic/agents/copilot-pull-request-reviewer")
+                           | select(.status != "completed")') ||
     return 1
   copilot_runs=$(jq -s . <<<"$copilot_runs") || return 1
   ci_runs=$(gh run list --workflow ci.yml --commit "$sha" --limit 50 --json status,conclusion,createdAt,url \

@@ -128,7 +128,11 @@ FACTORY_STUB_GH = <<~'SH'
       else all="$*"; sha=${all##*--commit }; answer "$FIXTURES/ci-${sha%% *}.json"; fi ;;
     "api repos/owner/repo/actions/runs"*)
       [[ ! -e "$FIXTURES/runs-fail" ]] || exit 1
-      answer "$FIXTURES/copilot-runs.json" ;;
+      branch=${2#*&branch=}; branch=${branch%%&*}
+      jq --arg branch "$branch" '{workflow_runs: [.workflow_runs[]
+        | select(.head_branch == null or (.head_branch | @uri) == $branch)]}' \
+        "$FIXTURES/copilot-runs.json" > "$FIXTURES/branch-runs.json"
+      answer "$FIXTURES/branch-runs.json" ;;
     "pr ready") [[ ! -e "$FIXTURES/ready-fail" ]] ;;
     "pr comment") { echo "--- comment by $GH_TOKEN"; cat; } >> "$FIXTURES/comments" ;;
   esac
@@ -253,6 +257,33 @@ check("active coding still waits even after the timeline start expires") do
                              copilot_runs: [{ path: "dynamic/copilot-swe-agent/copilot", status: "in_progress",
                                               pull_requests: [{ number: 1 }] }])
   ok && comments.empty? && calls.none? { |c| c.include?("workflow run") }
+end
+
+check("coding on a shared head branch holds both target bases, but not another branch") do
+  shared = "copilot/shared"
+  views = [
+    pr_view(1).merge(headRefName: shared),
+    pr_view(2).merge(headRefName: shared, baseRefName: "release"),
+    pr_view(3),
+  ]
+  coding = { path: "dynamic/copilot-swe-agent/copilot", status: "in_progress",
+             head_branch: shared, pull_requests: [{ number: 2 }] }
+  ok, calls, comments = scan(prs: [1, 2, 3].map { |n| copilot_pr(n) }, views:,
+                             ci_runs: { SHA => RED_CI }, copilot_runs: [coding])
+  ok && calls.grep(/pr comment \d+ --body-file/).one? { |c| c.include?("pr comment 3 ") } &&
+    calls.grep(%r{api repos/owner/repo/actions/runs}).length == 3 &&
+    calls.any? { |c| c.include?("branch=copilot%2Fshared&per_page=100") } &&
+    calls.any? { |c| c.include?("branch=copilot%2Fx-3&per_page=100") } &&
+    calls.none? { |c| c.include?("workflow run") || c.match?(/pr (?:comment|edit|ready) [12] /) } &&
+    comments.include?("@copilot CI failed")
+end
+
+check("an active native-review run on the same branch does not hold coding rework") do
+  native = { path: "dynamic/agents/copilot-pull-request-reviewer", status: "in_progress",
+             head_branch: "copilot/x-1", pull_requests: [{ number: 2 }] }
+  ok, calls, comments = scan(prs: [copilot_pr(1)], views: [pr_view(1)],
+                             ci_runs: { SHA => RED_CI }, copilot_runs: [native])
+  ok && calls.one? { |c| c.include?("pr comment 1 --body-file -") } && comments.include?("@copilot CI failed")
 end
 
 check("completed native review activity allows exactly one factory-review dispatch") do
