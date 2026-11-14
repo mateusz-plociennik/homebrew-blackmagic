@@ -21,7 +21,7 @@ def decide(**overrides)
   state = {
     labels: [], copilot_working: false, handoff_sha: nil, sha: SHA, workflow_changed: false,
     mergeable: "MERGEABLE", now: NOW, reworks: [], reviews: [], ci_runs: [], review_runs: [],
-    last_block_at: nil
+    last_block_at: nil, copilot_started_at: NOW - 60
   }.merge(overrides)
   out, status = Open3.capture2e(FACTORY_SCRIPT, "decide", stdin_data: JSON.generate(state))
   raise out unless status.success?
@@ -88,6 +88,13 @@ end
 check("Copilot silent for 6h after a rework request blocks") do
   decide(reworks: [{ sha: SHA, at: NOW - 21_601 }]) == "block stalled"
 end
+check("an unknown start cannot extend an expired rework deadline") do
+  decide(copilot_working: true, reworks: [{ sha: SHA, at: NOW - 21_601 }]) == "block activity-unknown"
+end
+check("a confirmed active coding run still waits after an expired rework deadline") do
+  decide(copilot_active: true, copilot_working: true,
+         reworks: [{ sha: SHA, at: NOW - 21_601 }]) == "wait copilot"
+end
 check("the third rework is the last; the next one blocks") do
   rounds = [{ sha: "1" * 40, at: 1 }, { sha: "2" * 40, at: 2 }, { sha: "3" * 40, at: 3 }]
   decide(reworks: rounds[0, 2], ci_runs: [run("failure")]) == "rework ci" &&
@@ -119,6 +126,14 @@ FACTORY_STUB_GH = <<~'SH'
     "run list")
       if [[ "$*" == *factory-review.yml* ]]; then answer "$FIXTURES/review-runs.json"
       else all="$*"; sha=${all##*--commit }; answer "$FIXTURES/ci-${sha%% *}.json"; fi ;;
+    "api repos/owner/repo/actions/runs"*)
+      [[ ! -e "$FIXTURES/runs-fail" ]] || exit 1
+      branch=${2#*&branch=}; branch=${branch%%&*}
+      jq --arg branch "$branch" '{workflow_runs: [.workflow_runs[]
+        | select(.head_branch == null or (.head_branch | @uri) == $branch)]}' \
+        "$FIXTURES/copilot-runs.json" > "$FIXTURES/branch-runs.json"
+      answer "$FIXTURES/branch-runs.json" ;;
+    "pr ready") [[ ! -e "$FIXTURES/ready-fail" ]] ;;
     "pr comment") { echo "--- comment by $GH_TOKEN"; cat; } >> "$FIXTURES/comments" ;;
   esac
 SH
@@ -139,7 +154,7 @@ labels: [] }
 end
 
 # Runs a full scan; returns [success?, gh calls, comments posted].
-def scan(prs:, views:, ci_runs: {}, timelines: {}, review_runs: [], moved: [])
+def scan(prs:, views:, ci_runs: {}, timelines: {}, review_runs: [], copilot_runs: [], moved: [])
   Dir.mktmpdir do |dir|
     moved.each { |number| File.write("#{dir}/moved-#{number}", "") }
     File.write("#{dir}/tree-base.json", '{"tree":[{"path":".github","sha":"g1"}]}')
@@ -147,6 +162,7 @@ def scan(prs:, views:, ci_runs: {}, timelines: {}, review_runs: [], moved: [])
     File.chmod(0755, "#{dir}/gh")
     File.write("#{dir}/prs.json", JSON.generate(prs))
     File.write("#{dir}/review-runs.json", JSON.generate(review_runs))
+    File.write("#{dir}/copilot-runs.json", JSON.generate({ workflow_runs: copilot_runs }))
     views.each do |view|
       File.write("#{dir}/pr-#{view[:number]}.json", JSON.generate(view))
       github = view[:workflow_change] ? "g2" : "g1"
@@ -233,12 +249,157 @@ check("human-only checks: labelled but left in draft") do
   ok && calls.none? { |c| c.include?("pr ready") } && comments.include?("verdict=human -->")
 end
 
-check("Copilot still working: nothing is done") do
+check("active coding still waits even after the timeline start expires") do
   timeline = [{ event: "copilot_work_finished", created_at: "2026-01-01T00:00:00Z" },
               { event: "copilot_work_started", created_at: "2026-01-01T01:00:00Z" }]
   ok, calls, comments = scan(prs: [copilot_pr(1)], views: [pr_view(1)], ci_runs: { SHA => RED_CI },
-                             timelines: { 1 => timeline })
+                             timelines: { 1 => timeline },
+                             copilot_runs: [{ path: "dynamic/copilot-swe-agent/copilot", status: "in_progress",
+                                              pull_requests: [{ number: 1 }] }])
   ok && comments.empty? && calls.none? { |c| c.include?("workflow run") }
+end
+
+check("coding on a shared head branch holds both target bases, but not another branch") do
+  shared = "copilot/shared"
+  views = [
+    pr_view(1).merge(headRefName: shared),
+    pr_view(2).merge(headRefName: shared, baseRefName: "release"),
+    pr_view(3),
+  ]
+  coding = { path: "dynamic/copilot-swe-agent/copilot", status: "in_progress",
+             head_branch: shared, pull_requests: [{ number: 2 }] }
+  ok, calls, comments = scan(prs: [1, 2, 3].map { |n| copilot_pr(n) }, views:,
+                             ci_runs: { SHA => RED_CI }, copilot_runs: [coding])
+  ok && calls.grep(/pr comment \d+ --body-file/).one? { |c| c.include?("pr comment 3 ") } &&
+    calls.grep(%r{api repos/owner/repo/actions/runs}).length == 3 &&
+    calls.any? { |c| c.include?("branch=copilot%2Fshared&per_page=100") } &&
+    calls.any? { |c| c.include?("branch=copilot%2Fx-3&per_page=100") } &&
+    calls.none? { |c| c.include?("workflow run") || c.match?(/pr (?:comment|edit|ready) [12] /) } &&
+    comments.include?("@copilot CI failed")
+end
+
+check("an active native-review run on the same branch does not hold coding rework") do
+  native = { path: "dynamic/agents/copilot-pull-request-reviewer", status: "in_progress",
+             head_branch: "copilot/x-1", pull_requests: [{ number: 2 }] }
+  ok, calls, comments = scan(prs: [copilot_pr(1)], views: [pr_view(1)],
+                             ci_runs: { SHA => RED_CI }, copilot_runs: [native])
+  ok && calls.one? { |c| c.include?("pr comment 1 --body-file -") } && comments.include?("@copilot CI failed")
+end
+
+check("completed native review activity allows exactly one factory-review dispatch") do
+  app = { slug: "copilot-pull-request-reviewer" }
+  timeline = [{ event: "copilot_work_started", created_at: "2026-11-05T08:28:44Z",
+                performed_via_github_app: app }]
+  ok, calls, comments = scan(prs: [copilot_pr(1)], views: [pr_view(1)], ci_runs: { SHA => GREEN_CI },
+                             timelines: { 1 => timeline },
+                             copilot_runs: [{ path: "dynamic/agents/copilot-pull-request-reviewer",
+                                              status: "completed", pull_requests: [{ number: 1 }] }])
+  ok && comments.empty? && calls.one? { |c| c.include?("workflow run factory-review.yml") } &&
+    calls.none? { |c| c.include?("workflow run ci.yml") || c.include?("pr edit") }
+end
+
+check("native-review finish cannot finish a coding session") do
+  timeline = [
+    { event: "copilot_work_started", created_at: "2026-01-01T01:00:00Z",
+      performed_via_github_app: { slug: "copilot-swe-agent" } },
+    { event: "copilot_work_finished", created_at: "2026-01-01T02:00:00Z",
+      performed_via_github_app: { slug: "copilot-pull-request-reviewer" } },
+  ]
+  ok, calls, comments = scan(prs: [copilot_pr(1)], views: [pr_view(1)], timelines: { 1 => timeline })
+  ok && comments.include?("reason=activity-unknown -->") && calls.none? { |c| c.include?("workflow run") }
+end
+
+check("native-review finish after a rework request does not count as a coding reply") do
+  now = Time.now.utc
+  requested = (now - 60).strftime("%Y-%m-%dT%H:%M:%SZ")
+  body = "<!-- factory-rework sha=#{SHA} reason=ci -->"
+  view = pr_view(1, comments: [comment("rework-user", body, at: requested)])
+  timeline = [{ event: "copilot_work_finished", created_at: now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                performed_via_github_app: { slug: "copilot-pull-request-reviewer" } }]
+  ok, calls, comments = scan(prs: [copilot_pr(1)], views: [view], timelines: { 1 => timeline })
+  ok && comments.empty? && calls.none? { |c| c.include?("workflow run") || c.include?("pr edit") }
+end
+
+check("unknown active runs without a PR link fail closed even without a timeline start") do
+  ok, calls, comments = scan(prs: [copilot_pr(1)], views: [pr_view(1)],
+                             copilot_runs: [{ path: "dynamic/unknown", status: "queued", pull_requests: [] }])
+  ok && comments.empty? && calls.none? { |c| c.include?("workflow run") || c.include?("pr edit") }
+end
+
+check("an expired unmatched start blocks for human recovery, never dispatches overlapping work") do
+  timeline = [{ event: "copilot_work_started", created_at: "2026-01-01T01:00:00Z" }]
+  view = pr_view(1, comments: [comment("rework-user", "<!-- factory-rework sha=#{SHA} reason=ci -->")])
+  ok, calls, comments = scan(prs: [copilot_pr(1)], views: [view], ci_runs: { SHA => RED_CI },
+                             timelines: { 1 => timeline })
+  ok && comments.include?("reason=activity-unknown -->") &&
+    calls.one? { |c| c.include?("pr edit 1 --add-label agent:blocked") } &&
+    calls.none? { |c| c.include?("workflow run") } && comments.exclude?("@copilot ")
+end
+
+check("a recent unknown start waits without dispatch") do
+  timeline = [{ event: "copilot_work_started", created_at: Time.now.utc.strftime("%Y-%m-%dT%H:%M:%SZ") }]
+  ok, calls, comments = scan(prs: [copilot_pr(1)], views: [pr_view(1)], timelines: { 1 => timeline })
+  ok && comments.empty? && calls.none? { |c| c.include?("workflow run") || c.include?("pr edit") }
+end
+
+check("deliberate unblocking acknowledges old orphan starts but not fresh activity") do
+  blocked = comment("github-actions", "<!-- factory-blocked sha=#{SHA} reason=activity-unknown -->",
+                    at: "2026-01-02T00:00:00Z")
+  view = pr_view(1, comments: [blocked])
+  old = { event: "copilot_work_started", created_at: "2026-01-01T01:00:00Z" }
+  fresh = old.merge(created_at: Time.now.utc.strftime("%Y-%m-%dT%H:%M:%SZ"))
+  results = [old, fresh].map { |event| scan(prs: [copilot_pr(1)], views: [view], timelines: { 1 => [event] }) }
+  results.all? { |ok, _, comments| ok && comments.empty? } &&
+    results[0][1].any? { |c| c.include?("workflow run ci.yml") } &&
+    results[1][1].none? { |c| c.include?("workflow run") }
+end
+
+check("a coding activity API failure fails closed without actions or markers") do
+  timeline = [{ event: "copilot_work_started", created_at: "2026-01-01T01:00:00Z" }]
+  ok, calls, comments = scan(prs: [copilot_pr(1)], views: [pr_view(1)], timelines: { 1 => timeline }) do |dir|
+    File.write("#{dir}/runs-fail", "")
+  end
+  !ok && comments.empty? && calls.none? { |c| c.include?("workflow run") || c.include?("pr edit") }
+end
+
+check("human handoff converts a ready PR to draft before writing its trusted marker") do
+  view = pr_view(1, draft: false, reviews: [review("github-actions", verdict("human"))])
+  ok, calls, comments = scan(prs: [copilot_pr(1)], views: [view], ci_runs: { SHA => GREEN_CI })
+  ready = calls.index("token=actions-token pr ready 1 --undo")
+  posted = calls.index("token=actions-token pr comment 1 --body-file -")
+  ok && ready && posted && ready < posted && comments.include?("verdict=human -->")
+end
+
+check("a failed draft conversion never writes a handoff marker or label") do
+  view = pr_view(1, draft: false, reviews: [review("github-actions", verdict("human"))])
+  ok, calls, comments = scan(prs: [copilot_pr(1)], views: [view], ci_runs: { SHA => GREEN_CI }) do |dir|
+    File.write("#{dir}/ready-fail", "")
+  end
+  !ok && comments.empty? && calls.none? { |c| c.include?("pr edit") }
+end
+
+check("an existing same-SHA human handoff only reconciles draft, then becomes idempotent") do
+  handoff = comment("github-actions", "<!-- factory-handoff sha=#{SHA} verdict=human -->")
+  views = [false, true].map { |draft| pr_view(1, draft:, comments: [handoff]) }
+  results = views.map { |view| scan(prs: [copilot_pr(1)], views: [view]) }
+  results.all? { |ok, _, comments| ok && comments.empty? } &&
+    results[0][1].one? { |c| c.include?("pr ready 1 --undo") } &&
+    results[1][1].none? { |c| c.include?("pr ready") } &&
+    results.all? { |_, calls, _| calls.none? { |c| c.include?("workflow run") || c.include?("pr edit") } }
+end
+
+check("failed reconciliation reports failure without posting another trusted marker") do
+  handoff = comment("github-actions", "<!-- factory-handoff sha=#{SHA} verdict=human -->")
+  ok, _, comments = scan(prs: [copilot_pr(1)], views: [pr_view(1, draft: false, comments: [handoff])]) do |dir|
+    File.write("#{dir}/ready-fail", "")
+  end
+  !ok && comments.empty?
+end
+
+check("a same-SHA pass handoff is never converted back to draft") do
+  handoff = comment("github-actions", "<!-- factory-handoff sha=#{SHA} verdict=pass -->")
+  ok, calls, comments = scan(prs: [copilot_pr(1)], views: [pr_view(1, draft: false, comments: [handoff])])
+  ok && comments.empty? && calls.none? { |c| c.include?("pr ready") || c.include?("workflow run") }
 end
 
 check("a blocked PR gets the label and a reason") do
