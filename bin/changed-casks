@@ -10,7 +10,8 @@ files=$(gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" --name-only)
 
 casks=""
 # Existence check drops casks the PR deletes or renames away.
-for cask in $(printf '%s\n' "$files" | sed -n 's|^Casks/\(.*\)\.rb$|\1|p'); do
+# A changed retained-receipts list re-installs its cask, so the list is proven when it changes.
+for cask in $(printf '%s\n' "$files" | sed -n -e 's|^Casks/\(.*\)\.rb$|\1|p' -e 's|^test/retained-receipts/||p' | sort -u); do
   if [ -f "$root/Casks/$cask.rb" ]; then casks="$casks $cask"; fi
 done
 echo "$casks"

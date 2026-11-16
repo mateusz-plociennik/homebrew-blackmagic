@@ -28,4 +28,8 @@ stub_gh 'printf "%s\n" README.md Casks/blackmagic-video-assist.rb Casks/blackmag
 out=$("${root}/bin/changed-casks") || fail "diff exited nonzero"
 [[ "${out}" == " blackmagic-video-assist" ]] || fail "expected ' blackmagic-video-assist', got '${out}'"
 
+stub_gh 'printf "%s\n" Casks/blackmagic-video-assist.rb test/retained-receipts/blackmagic-video-assist test/retained-receipts/blackmagic-camera'
+out=$("${root}/bin/changed-casks") || fail "diff exited nonzero"
+[[ "${out}" == " blackmagic-camera blackmagic-video-assist" ]] || fail "expected retained-receipts lists to select their casks once, got '${out}'"
+
 echo "changed-casks: all checks passed"
