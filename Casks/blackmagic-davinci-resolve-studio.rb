@@ -2,8 +2,8 @@ cask "blackmagic-davinci-resolve-studio" do
   require Tap.fetch("mateusz-plociennik/blackmagic").path/"lib/bmd_catalog"
   require Tap.fetch("mateusz-plociennik/blackmagic").path/"lib/bmd_download_strategy"
 
-  version "21.1.1"
-  sha256 "25ac3f6b8e3eaa617d0a9451f651d2d41dc0799512156c664b55cbb1a7cff07d"
+  version "21.1.2"
+  sha256 "8e0e641fce2427ac122bfefd9ee2cf40308c9cb0d1e7dd7ca8981546ee341e78"
 
   url "https://sw.blackmagicdesign.com/DaVinciResolve/v#{version}/DaVinci_Resolve_Studio_#{version}_Mac.zip",
       using: BmdDownloadStrategy,
@@ -24,7 +24,7 @@ cask "blackmagic-davinci-resolve-studio" do
   pkg "Install Resolve #{version}.pkg"
 
   # Same uninstall policy and receipt map as `blackmagic-davinci-resolve.rb`, which explains both;
-  # checked against the Studio 21.1.1 pkg and its own `Uninstall Resolve.app` script. Differences:
+  # checked against the Studio 21.1.2 pkg and its own `Uninstall Resolve.app` script. Differences:
   # - Studio's own receipts are `Manifest` (Resolve, the full Proxy Generator, the Advanced Panel
   #   daemon) and `ManifestPlugin` (the OFX renderer) instead of `ManifestLite`.
   # - Its vendor script deletes `Blackmagic Proxy Generator.app` and the OFX renderer, not

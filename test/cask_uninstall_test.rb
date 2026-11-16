@@ -5,7 +5,7 @@ require "tmpdir"
 require "cask/cask_loader"
 require_relative "support"
 
-camera = Cask::CaskLoader.load(File.read(File.expand_path("../Casks/blackmagic-camera.rb", __dir__)))
+camera = Cask::CaskLoader.from_path(File.expand_path("../Casks/blackmagic-camera.rb", __dir__))
 uninstall = camera.artifacts.grep(Cask::Artifact::Uninstall).fetch(0)
 steps = camera.artifacts.grep(Cask::Artifact::UninstallPostflightSteps).fetch(0).steps
 
@@ -31,7 +31,27 @@ check("Camera forgets only the two bundled RAW receipts, guarded by their existe
   end
 end
 
-ultimatte_12 = Cask::CaskLoader.load(File.read(File.expand_path("../Casks/blackmagic-ultimatte-12.rb", __dir__)))
+ultimatte = Cask::CaskLoader.from_path(File.expand_path("../Casks/blackmagic-ultimatte.rb", __dir__))
+ultimatte_uninstall = ultimatte.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
+
+check("Ultimatte removes the SmartRemote plug-in and forgets only its four exact receipts") do
+  ultimatte_uninstall.fetch(:script) == {
+    executable: "Uninstall Ultimatte.app/Contents/Resources/uninstall.sh",
+    sudo:       true,
+  } && ultimatte_uninstall.fetch(:pkgutil) == [
+    "^com\\.blackmagic-design\\.SmartRemote$",
+    "^com\\.blackmagic-design\\.Ultimatte$",
+    "^com\\.blackmagic-design\\.UltimatteAssets$",
+    "^com\\.blackmagic-design\\.UltimatteUninstaller$",
+  ] && ultimatte_uninstall.fetch(:delete) ==
+    "/Library/Application Support/Blackmagic Design/Ultimatte/AdminUtility/PlugIns/SmartRemote"
+end
+
+check("Ultimatte conflicts with Ultimatte 12, which shares its receipts and app directory") do
+  ultimatte.conflicts_with.fetch(:cask).include?("blackmagic-ultimatte-12")
+end
+
+ultimatte_12 = Cask::CaskLoader.from_path(File.expand_path("../Casks/blackmagic-ultimatte-12.rb", __dir__))
 ultimatte_12_uninstall = ultimatte_12.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
 
 check("Ultimatte 12 invokes its vendor uninstaller and forgets only its exact shared receipts") do
@@ -53,7 +73,7 @@ check("Ultimatte 12 caveats require Rosetta") do
   ultimatte_12.caveats_object.invoked?(:requires_rosetta)
 end
 
-cintel = Cask::CaskLoader.load(File.read(File.expand_path("../Casks/blackmagic-cintel.rb", __dir__)))
+cintel = Cask::CaskLoader.from_path(File.expand_path("../Casks/blackmagic-cintel.rb", __dir__))
 cintel_uninstall = cintel.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
 
 check("Cintel removes both orphaned helper jobs, plists and the privileged helper") do
@@ -67,7 +87,7 @@ check("Cintel removes both orphaned helper jobs, plists and the privileged helpe
   ]
 end
 
-hyperdeck = Cask::CaskLoader.load(File.read(File.expand_path("../Casks/blackmagic-hyperdeck.rb", __dir__)))
+hyperdeck = Cask::CaskLoader.from_path(File.expand_path("../Casks/blackmagic-hyperdeck.rb", __dir__))
 hyperdeck_uninstall = hyperdeck.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
 
 check("HyperDeck forgets only its three exact package receipts") do
@@ -91,8 +111,8 @@ check("HyperDeck removes only its app, support files, and copied Avid templates"
   ]
 end
 
-control_for_arduino = Cask::CaskLoader.load(
-  File.read(File.expand_path("../Casks/blackmagic-control-for-arduino.rb", __dir__)),
+control_for_arduino = Cask::CaskLoader.from_path(
+  File.expand_path("../Casks/blackmagic-control-for-arduino.rb", __dir__),
 )
 control_for_arduino_uninstall = control_for_arduino.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
 
@@ -109,7 +129,7 @@ check("Control for Arduino runs its uninstaller and removes only its exact packa
 end
 
 casks = Dir[File.expand_path("../Casks/*.rb", __dir__)].map do |path|
-  [File.basename(path), Cask::CaskLoader.load(File.read(path))]
+  [File.basename(path), Cask::CaskLoader.from_path(path)]
 end
 
 check("pkgutil receipt cleanup uses explicit anchored package ids") do
@@ -238,7 +258,7 @@ check("Teranex requires the minimum macOS version stated in its release notes") 
   requirement && requirement.minimum_version.to_s == "11"
 end
 
-smartview = Cask::CaskLoader.load(File.read(File.expand_path("../Casks/blackmagic-smartview.rb", __dir__)))
+smartview = Cask::CaskLoader.from_path(File.expand_path("../Casks/blackmagic-smartview.rb", __dir__))
 smartview_uninstall = smartview.artifacts.grep(Cask::Artifact::Uninstall).fetch(0).directives
 
 check("SmartView removes only its exact receipts and product-owned directories") do
