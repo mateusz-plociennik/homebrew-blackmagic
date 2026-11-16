@@ -2,8 +2,8 @@ cask "blackmagic-camera" do
   require Tap.fetch("mateusz-plociennik/blackmagic").path/"lib/bmd_catalog"
   require Tap.fetch("mateusz-plociennik/blackmagic").path/"lib/bmd_download_strategy"
 
-  version "10.3.1"
-  sha256 "1e1fdf1f331a589c13cc56d1c97a36e7c76f1e79ce654bf1b7e359aba902b0a1"
+  version "10.3.3"
+  sha256 "3006c5c8005cb6c693812181575787d79b8e7fdd86c71eee9af10ee18421b993"
 
   url "https://sw.blackmagicdesign.com/CinemaCamera/v#{version}/Blackmagic_Camera_Setup_Macintosh_#{version}.zip",
       using: BmdDownloadStrategy,
