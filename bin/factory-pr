@@ -48,8 +48,12 @@ read -r -d '' DECIDE <<'JQ' || true
 | ([$s.review_runs[] | select(.status == "completed" and .at > $since)] | length) as $review_attempts
 | def rework($why): if ($rw | length) >= $max then "block rounds" else "rework \($why)" end;
 if ($s.labels | index("agent:blocked")) then "skip blocked"
-elif $s.copilot_working then "wait copilot"
-elif $s.handoff_sha == $s.sha then "skip handed-off"
+elif $s.copilot_active then "wait copilot"
+elif $s.copilot_working then
+  (if $s.now - ([$s.copilot_started_at, ($rw_here | last | .at)] | map(select(. != null)) | min) > $stall
+   then "block activity-unknown" else "wait copilot" end)
+elif $s.handoff_sha == $s.sha then
+  (if $s.handoff_verdict == "human" and $s.draft == false then "draft -" else "skip handed-off" end)
 elif ($rw_here | length) > 0 then
   (if ($s.copilot_finished_at // 0) > ($rw_here | last | .at) then "block disputed"
    elif $s.now - ($rw_here | last | .at) > $stall then "block stalled"
@@ -104,7 +108,7 @@ github_tree() {
 # Called as `if ! state=$(pr_state …)`, where `set -e` does not apply: every step returns on failure
 # itself, so a failed API call skips the PR instead of deciding on partial state.
 pr_state() {
-  local pr="$1" view sha base events ci_runs review_runs head_tree base_tree
+  local pr="$1" view sha base events copilot_runs branch ci_runs review_runs head_tree base_tree
   view=$(gh pr view "$pr" --json number,isDraft,headRefName,headRefOid,baseRefName,mergeable,labels,comments,reviews) ||
     return 1
   sha=$(jq -r .headRefOid <<<"$view") || return 1
@@ -115,13 +119,26 @@ pr_state() {
   head_tree=$(github_tree "$sha") || return 1
   base_tree=$(github_tree "$base") || return 1
   events=$(gh api --paginate "repos/$GH_REPO/issues/$pr/timeline?per_page=100" \
-             --jq '.[] | select((.event // "") | startswith("copilot_work")) | "\(.event) \(.created_at)"') || return 1
+             --jq '.[] | select((.event // "") | startswith("copilot_work"))
+                    | {event, created_at, app: .performed_via_github_app.slug}') || return 1
+  events=$(jq -s 'map(select(.app != "copilot-pull-request-reviewer")) | sort_by(.created_at)' \
+              <<<"$events") || return 1
+  # Native review has its own App and dynamic workflow. Neither proves coding activity. Keep
+  # unmatched starts conservative; only a live run holds them beyond the existing rework deadline.
+  # A coding run can mutate every PR sharing this repository/branch, regardless of its target base.
+  branch=$(jq -r '.headRefName | @uri' <<<"$view") || return 1
+  copilot_runs=$(gh api "repos/$GH_REPO/actions/runs?event=dynamic&branch=$branch&per_page=100" --paginate \
+                    --jq '.workflow_runs[] | select(.path != "dynamic/agents/copilot-pull-request-reviewer")
+                           | select(.status != "completed")') ||
+    return 1
+  copilot_runs=$(jq -s . <<<"$copilot_runs") || return 1
   ci_runs=$(gh run list --workflow ci.yml --commit "$sha" --limit 50 --json status,conclusion,createdAt,url \
               --jq 'map({status, conclusion, url, at: (.createdAt | fromdateiso8601)})') || return 1
   review_runs=$(jq --arg title "Review #$pr at $sha" \
                   'map(select(.displayTitle == $title) | {status, conclusion, at: (.createdAt | fromdateiso8601)})' \
                   <<<"$all_review_runs") || return 1
-  jq -n --argjson v "$view" --arg events "$events" --argjson ci "$ci_runs" --argjson rr "$review_runs" \
+  jq -n --argjson v "$view" --argjson events "$events" --argjson active "$copilot_runs" \
+     --argjson ci "$ci_runs" --argjson rr "$review_runs" \
      --arg rework_login "$rework_login" --argjson now "$now" \
      --argjson workflow_changed "$([[ "$head_tree" == "$base_tree" ]] && echo false || echo true)" '
     def trusted: .author.login == "github-actions" or .author.login == $rework_login;
@@ -130,16 +147,23 @@ pr_state() {
       # The last marker in a body is the one trusted code wrote; anything before it is quoted text.
       | ([.body | capture("<!-- factory-\($kind) sha=(?<sha>[0-9a-f]{40})(?<rest>[^>]*)-->"; "g")] | last // empty)
       | . + {at: ($at | fromdateiso8601), body: $body}] | sort_by(.at);
+    (marker("blocked") | last | .at // 0) as $last_block |
+    # Unblocking acknowledges old starts, never a run that is still active.
+    ($events | group_by(.app) | map(last)
+      | map(select(.event == "copilot_work_started" and (.created_at | fromdateiso8601) > $last_block))) as $starts |
     {
       number: $v.number, draft: $v.isDraft, branch: $v.headRefName, sha: $v.headRefOid,
       mergeable: $v.mergeable, labels: [$v.labels[].name], workflow_changed: $workflow_changed,
-      copilot_working: (($events | split("\n") | map(select(. != "")) | last // "") | startswith("copilot_work_started ")),
-      copilot_finished_at: ([$events | split("\n")[] | select(startswith("copilot_work_finished"))
-                             | split(" ")[1] | fromdateiso8601] | max),
+      copilot_active: ($active | length > 0),
+      copilot_working: ($starts | length > 0),
+      copilot_started_at: ([$starts[].created_at | fromdateiso8601] | min),
+      copilot_finished_at: ([$events[] | select(.event == "copilot_work_finished")
+                             | .created_at | fromdateiso8601] | max),
       ci_runs: $ci, review_runs: $rr, now: $now,
       reviews: [marker("review")[] | {sha, at, body, verdict: (.rest | capture("verdict=(?<v>[a-z]+)").v)}],
       reworks: [marker("rework")[] | {sha, at}],
       handoff_sha: (marker("handoff") | last | .sha),
+      handoff_verdict: ((marker("handoff") | last | .rest // "" | capture("verdict=(?<v>[a-z]+)").v) // null),
       last_block_at: (marker("blocked") | last | .at)
     }'
 }
@@ -183,6 +207,7 @@ handoff() {
     printf '@%s CI is green and the factory review passed on %s. Ready for your review and merge.\n\n<!-- factory-handoff sha=%s verdict=pass -->\n' \
       "$owner" "$sha" "$sha" | comment "$pr"
   else
+    [[ $(jq -r .draft <<<"$state") == true ]] || gh pr ready "$pr" --undo >/dev/null || return 1
     gh pr edit "$pr" --add-label ready-for-human >/dev/null || return 1
     printf '@%s CI is green and the factory review found nothing to fix on %s, but it lists checks only a human can do (see the review). Left as draft until they are done.\n\n<!-- factory-handoff sha=%s verdict=human -->\n' \
       "$owner" "$sha" "$sha" | comment "$pr"
@@ -195,6 +220,7 @@ block() {
   case "$why" in
     rounds) reason="$MAX_ROUNDS rework rounds did not get this PR through CI and review." ;;
     stalled) reason="Copilot did not push anything within $((STALL_SECONDS / 3600))h of the last rework request." ;;
+    activity-unknown) reason="An unmatched Copilot start exceeded the $((STALL_SECONDS / 3600))h rework deadline without a confirmed active run. Check the coding session and timeline before resuming; no overlapping work was dispatched." ;;
     disputed) reason="Copilot finished the last rework request without pushing; it may have disputed a finding or failed. Read its reply: fix, push, or merge as is." ;;
     workflow-change) reason="This PR changes \`.github/\`, so the factory will not start CI for it: a dispatched run would execute the branch's workflow files with this repository's secrets. Read the change, then approve its waiting CI run." ;;
     ci-not-starting) reason="CI on $sha was cancelled 3 times without finishing." ;;
@@ -245,6 +271,7 @@ while read -r pr <&3; do
     review) gh workflow run factory-review.yml --ref main -f pr="$pr" -f sha="$sha" && ok=true || ok=false ;;
     rework) rework "$pr" "$reason" "$state" && ok=true || ok=false ;;
     handoff) handoff "$pr" "$reason" "$state" && ok=true || ok=false ;;
+    draft) gh pr ready "$pr" --undo >/dev/null && ok=true || ok=false ;;
     block) block "$pr" "$reason" "$state" && ok=true || ok=false ;;
     *) ok=false ;;
   esac
