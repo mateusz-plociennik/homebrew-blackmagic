@@ -2,8 +2,8 @@ cask "blackmagic-smartview" do
   require Tap.fetch("mateusz-plociennik/blackmagic").path/"lib/bmd_catalog"
   require Tap.fetch("mateusz-plociennik/blackmagic").path/"lib/bmd_download_strategy"
 
-  version "5.0.4"
-  sha256 "b1c3d5781596fedd4f8fb5693d1a0a3e406cb1c0822c5b2d536ecf3e2abb6dba"
+  version "5.0.5"
+  sha256 "938b1ba0145ab2336b87de7bcc2014d00c481a3f521508655b281c8f2c8344c1"
 
   url "https://sw.blackmagicdesign.com/SmartView/v#{version}/Blackmagic_SmartView_Macintosh_#{version}.zip",
       using: BmdDownloadStrategy,
