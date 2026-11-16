@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "json"
+require "tempfile"
 require "utils/curl"
 
 require_relative "bmd_catalog"
@@ -45,19 +46,28 @@ module BmdResolver
     def mint_signed_url(download_id, product: nil, registration: false, terms: false, timeout: nil)
       country = BmdCatalog.country
       endpoint = format(ENDPOINT, country:, id: download_id)
+      body = JSON.generate(request_body(product:, registration:, terms:))
 
-      result = Utils::Curl.curl_output(
-        "--request", "POST",
-        "--header", "Content-Type: application/json;charset=UTF-8",
-        "--header", "Accept: application/json, text/plain, */*",
-        "--header", "Origin: #{SITE}",
-        "--header", "Referer: #{SITE}/#{country}/support/",
-        "--data-raw", JSON.generate(request_body(product:, registration:, terms:)),
-        endpoint,
-        retries:    0,
-        user_agent: USER_AGENT,
-        timeout:
-      )
+      # The body goes to curl from a file, not as an argument. It can hold the user's registration
+      # details, and Homebrew prints curl's argv, shell-escaped, under `HOMEBREW_DEBUG` +
+      # `HOMEBREW_VERBOSE`. The escaping defeats GitHub's secret masking in CI (#107).
+      # `Tempfile.create` makes the file 0600 and deletes it when the block ends.
+      result = Tempfile.create(["bmd-resolve", ".json"]) do |file|
+        file.write(body)
+        file.close
+        Utils::Curl.curl_output(
+          "--request", "POST",
+          "--header", "Content-Type: application/json;charset=UTF-8",
+          "--header", "Accept: application/json, text/plain, */*",
+          "--header", "Origin: #{SITE}",
+          "--header", "Referer: #{SITE}/#{country}/support/",
+          "--data-binary", "@#{file.path}",
+          endpoint,
+          retries:    0,
+          user_agent: USER_AGENT,
+          timeout:
+        )
+      end
 
       response = result.stdout.strip
       return response if result.success? && response.start_with?("https://")
