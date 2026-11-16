@@ -30,7 +30,9 @@ cask "blackmagic-davinci-resolve-studio" do
   # - Its vendor script deletes `Blackmagic Proxy Generator.app` and the OFX renderer, not
   #   Proxy Generator Lite.
   # Staging and nested receipts are the same, and `FairlightDriver` and `BlackmagicRaw_resolve`
-  # receipts stay on purpose. Re-check both when bumping.
+  # receipts stay on purpose. CI also observed `com.Apple.pkg.ASAF.SDK` left by 21.1.2; do not remove
+  # its SDK payload or receipt here. The optional CI retention list records these three receipts;
+  # it does not prove shared payload coexistence. Re-check the installer and uninstaller when bumping.
   uninstall launchctl: "com.blackmagic-design.DaVinciResolveBMDPanelDaemon",
             pkgutil:   [
               "^com\\.blackmagic-design\\.DaVinciKeyboards$",

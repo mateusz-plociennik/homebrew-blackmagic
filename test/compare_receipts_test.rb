@@ -50,6 +50,11 @@ check("a retained receipt that was never installed passes") do
   compare(%w[com.a], %w[com.a], %w[com.kept]) == ["", 0]
 end
 
+check("listing a pre-existing receipt never permits its removal") do
+  out, code = compare(%w[com.neighbor], [], %w[com.neighbor])
+  code == 1 && out.include?("removed pre-existing receipts: com.neighbor")
+end
+
 check("retaining one receipt still fails on another leftover") do
   out, code = compare([], %w[com.kept com.new], %w[com.kept])
   code == 1 && out.include?("left receipts behind: com.new") && out.exclude?("com.kept")

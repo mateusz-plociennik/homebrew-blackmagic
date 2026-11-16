@@ -85,7 +85,8 @@ uninstaller, change the stanza:
 
 If the uninstall keeps receipts on purpose, list them, one per line, in
 `test/retained-receipts/<cask>`. CI then lets those receipts remain after uninstall, and fails on
-any other leftover.
+any other leftover or removal of a pre-existing receipt, even if listed. Document the versioned
+installer/uninstaller evidence in the cask; a list is not evidence that shared payload survives.
 Add a cask to `SKIP_CASKS` in `ci.yml` only when it cannot install or uninstall unattended.
 
 To list the Blackmagic products that have no cask and no skip reason, run:
